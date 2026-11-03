@@ -165,7 +165,7 @@ export default function App() {
             </button>
           </div>
           <div className="cases">
-            <span className="muted">veya sunumdaki bir vakayı yükleyin:</span>
+            <span className="muted">Eğitim amaçlı örnek vakalar</span>
             <div className="case-row">
               {CASES.map((c, i) => (
                 <button key={c.name} className="chip-btn" onClick={() => loadCase(i)}>{c.name}</button>
