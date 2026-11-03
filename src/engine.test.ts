@@ -6,7 +6,7 @@ const base: Inputs = { sample: 'arter', chronicity: 'bilinmiyor', bp: 'bilinmiyo
 const run = (v: Partial<Inputs>, s = DEFAULT_SETTINGS) => analyze({ ...base, ...v }, s);
 const keys = (r: ReturnType<typeof run>) => r.disorders.map((d) => `${d.key}:${d.role}`);
 
-describe('sunum vakaları', () => {
+describe('eğitim vakaları', () => {
   it('Vaka 1: saf HAGMA, uygun kompansasyon', () => {
     const r = run(CASES[0].values);
     expect(keys(r)).toEqual(['HAGMA:primer']);
@@ -62,6 +62,12 @@ describe('eksik veri ve türetme', () => {
     const r = run({ sample: 'ven', pH: 7.35, pCO2: 46, HCO3: 25 });
     expect(r.usedABG!.pH).toBeCloseTo(7.38);
     expect(r.headline).toBe('Asit-baz dengesi normal sınırlarda');
+  });
+  it('pO2 60–79 bozukluk sayılmaz, < 60 sayılır', () => {
+    expect(run({ pO2: 72, age: 75 }).steps[0].lines[0].tone).toBe('ok');
+    expect(run({ pO2: 72, age: 40 }).steps[0].lines[0].tone).toBe('warn');
+    expect(run({ pO2: 72, age: 40 }).disorders).toEqual([]);
+    expect(run({ pO2: 58 }).disorders.map((d) => d.key)).toEqual(['hypox']);
   });
   it('kombine asidoz', () => {
     expect(keys(run({ pH: 7.1, pCO2: 55, HCO3: 16 }))).toEqual(['MA:primer', 'RAc:primer']);

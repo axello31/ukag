@@ -128,7 +128,7 @@ export const VENOUS = { dpH: 0.03, dpCO2: 4, dHCO3: 1 };
 
 const SRC = {
   winter: 'Albert MS, Dell RB, Winters RW. Ann Intern Med 1967;66:312-22.',
-  comp: 'Berend K, de Vries APJ, Gans ROB. N Engl J Med 2014;371:1434-45; sunum (Dr. G. Aksel) kompansasyon tablosu.',
+  comp: 'Berend K, de Vries APJ, Gans ROB. N Engl J Med 2014;371:1434-45; Börekçi Ş, Umut S. Türk Toraks Derg 2011;12(Ek 1):5-9.',
   ag: 'Kraut JA, Madias NE. Clin J Am Soc Nephrol 2007;2:162-74.',
   figge: 'Figge J ve ark. Crit Care Med 1998;26:1807-10.',
   rastegar: 'Rastegar A. J Am Soc Nephrol 2007;18:2429-31.',
@@ -244,7 +244,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
       text: 'Arter seçildi ama pO₂ < 40 mmHg' + (has(inp.sO2) ? ' ve sO₂ < %75' : '') + ': örnek venöz olabilir. Klinik (SpO₂) ile karşılaştırın, şüphede tekrarlayın.',
       how: {
         formula: 'Periferik ven kanında pO₂ genellikle < 40 mmHg (çoğu zaman < 30). pO₂ > 40 ve sO₂ > %75 ise arter kanı olasılığı yüksek.',
-        source: 'Sunum (Dr. G. Aksel) Vaka 3; Byrne 2014: arteriyel pO₂ venözden ortalama 36,9 mmHg yüksek.',
+        source: 'Byrne AL ve ark. Respirology 2014;19:168-75 — arteriyel pO₂ venözden ortalama 36,9 mmHg yüksek.',
       },
     });
   }
@@ -267,25 +267,37 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
   } else if (has(inp.pO2)) {
     const p = inp.pO2;
     const roomAir = !has(inp.FiO2) || inp.FiO2 <= 21.5;
+    // Klinik olarak anlamlı hipoksemi / solunum yetmezliği eşiği 60 mmHg.
+    // 60–79 normalin alt sınırının altındadır ama yaşlıda fizyolojik olabilir → bozukluk olarak sayılmaz.
+    // ≥ 70 yaşta sağlıklı bireylerde normalin alt sınırı ≈ 60 mmHg ve yaşla daha fazla düşmez (Hardie 2004).
+    const expAge = has(inp.age) ? 104.2 - 0.27 * inp.age : undefined;
+    const ageOk = has(inp.age) && inp.age >= 70;
     let g = '';
-    if (p >= 80) g = 'normoksemi';
-    else if (p >= 60) g = 'hafif hipoksemi';
-    else if (p >= 40) g = 'orta hipoksemi';
+    if (p >= 80) g = 'normal';
+    else if (p >= 60)
+      g = ageOk
+        ? '70 yaş üstü için normal sınırlarda (bu yaşta normalin alt sınırı ≈ 60 mmHg)'
+        : `hafif düşük (60–79)${expAge !== undefined ? ` — yaşına göre beklenen ~${fmt(expAge, 0)} mmHg` : ''}; hipoksemi eşiği 60 mmHg`;
+    else if (p >= 40) g = 'hipoksemi';
     else g = 'ağır hipoksemi';
-    const tone: Tone = p >= 80 ? 'ok' : p >= 60 ? 'warn' : 'bad';
+    const tone: Tone = p >= 80 || ageOk ? 'ok' : p >= 60 ? 'warn' : 'bad';
     oxyTone = tone;
     oxy.push({
       tone,
       text: `PaO₂ ${f1(p)} mmHg: ${g}${!roomAir ? ' (O₂ desteği altında — FiO₂ ile birlikte yorumlayın)' : ''}.`,
-      how: { formula: 'Normal ≥ 80 · Hafif 60–79 · Orta 40–59 · Ağır < 40 mmHg (oda havasında)', source: 'Börekçi Ş, Umut S. Türk Toraks Derg 2011;12(Ek 1):5-9.' },
+      how: {
+        formula: 'Normal 80–100 · 60–79 hafif düşük · < 60 hipoksemi (solunum yetmezliği) · < 40 ağır hipoksemi (oda havasında)',
+        note: 'Hipoksemi eşiği her yaşta 60 mmHg’dir: oksihemoglobin eğrisinin dikleştiği nokta (SaO₂ ≈ %90). 80 mmHg genç erişkinde normalin alt sınırıdır; PaO₂ yaşla düşer (≈ 104,2 − 0,27 × yaş). 70 yaş üstü sağlıklı bireylerde normalin alt sınırı erkekte 62, kadında 59,6 mmHg bulunmuş ve bu yaştan sonra yaşla değişmemiştir; bu nedenle ≥ 70 yaşta 60–79 normal kabul edilir.',
+        source: 'Hardie JA ve ark. Chest 2004;125:2053-60; Sorbini CA ve ark. Respiration 1968;25:3-13; Börekçi Ş, Umut S. Türk Toraks Derg 2011;12(Ek 1):5-9.',
+      },
     });
     if (p < 60) {
       const t2 = has(pCO2) && pCO2 > 45;
       oxy.push({ tone: 'bad', text: `PaO₂ < 60 mmHg: solunum yetmezliği — ${t2 ? 'Tip 2 (hiperkapnik)' : has(pCO2) ? 'Tip 1 (hipoksemik)' : 'tip için pCO₂ gerekli'}.` });
       addDis('hypox', t2 ? 'Hipoksemik + hiperkapnik solunum yetmezliği (Tip 2)' : 'Hipoksemik solunum yetmezliği (Tip 1)', 'eşlik eden');
-    } else if (p < 80) addDis('hypox', 'Hipoksemi', 'eşlik eden');
+    }
     if (has(inp.age)) {
-      const exp = 104.2 - 0.27 * inp.age;
+      const exp = expAge!;
       calcs.push({
         label: 'Yaşa göre beklenen PaO₂',
         value: f1(exp),
@@ -425,7 +437,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
     ab.push({
       tone: acidemia || alkalemia ? 'warn' : 'ok',
       text: `pH ${f2(a.pH)}: ${acidemia ? 'asidemi (< 7,35)' : alkalemia ? 'alkalemi (> 7,45)' : 'normal aralıkta (7,35–7,45)'}.`,
-      how: { formula: 'Normal pH 7,35–7,45 · pCO₂ 35–45 mmHg · HCO₃⁻ 22–26 mmol/L', source: 'Sunum (Dr. G. Aksel); Berend 2014.' },
+      how: { formula: 'Normal pH 7,35–7,45 · pCO₂ 35–45 mmHg · HCO₃⁻ 22–26 mmol/L', source: 'Berend K ve ark. N Engl J Med 2014;371:1434-45.' },
     });
     if (a.pH < 7.2) alerts.push({ tone: 'bad', text: `Ağır asidemi (pH ${f2(a.pH)}).` });
     if (a.pH > 7.6) alerts.push({ tone: 'bad', text: `Ağır alkalemi (pH ${f2(a.pH)}).` });
@@ -457,7 +469,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
 
     const ruleHow: How = {
       formula: 'pH’nın yönü ile pCO₂/HCO₃⁻ değişiminin yönü karşılaştırılır. Asidemide pCO₂↑ → solunumsal, HCO₃⁻↓ → metabolik; alkalemide pCO₂↓ → solunumsal, HCO₃⁻↑ → metabolik. pH normal ama pCO₂ ve HCO₃⁻ anormalse mikst bozukluk vardır (pH 7,40’ın hangi tarafındaysa o süreç baskındır).',
-      source: 'Sunum (Dr. G. Aksel) 1–3. kurallar; Berend 2014.',
+      source: 'Berend K ve ark. N Engl J Med 2014;371:1434-45; Aygencel G. Türk Kardiyol Dern Arş 2014;42:194-202.',
     };
 
     if (!prim.length) {
@@ -631,7 +643,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
     ab.push({
       tone: be < -2 || be > 2 ? 'warn' : 'ok',
       text: `Baz fazlalığı ${f1(be)} mmol/L: ${be < -2 ? 'metabolik asidoz yönünde' : be > 2 ? 'metabolik alkaloz yönünde' : 'normal (−2/+2)'}.`,
-      how: { formula: 'BE < −2 → metabolik asidoz ; BE > +2 → metabolik alkaloz (bazı kaynaklarda ±2,5 veya ±3)', source: 'Sunum (Dr. G. Aksel).' },
+      how: { formula: 'BE < −2 → metabolik asidoz ; BE > +2 → metabolik alkaloz (bazı kaynaklarda ±2,5 veya ±3)', source: 'Berend K ve ark. N Engl J Med 2014;371:1434-45.' },
     });
     if (inp.trauma && be < -2) {
       const cls = be > -6 ? 'II (−2 ile −6)' : be > -10 ? 'III (−6 ile −10)' : 'IV (≤ −10)';
@@ -709,9 +721,9 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
           calc: `(${f1(agUse)} − ${st.normalAG}) / (24 − ${f1(hRaw)}) = ${f1(dAG)} / ${f1(dH)} = ${f2(r)}`,
           note:
             st.deltaMode === 'genis'
-              ? '< 0,4 hiperkloremik (normal AA’lı) asidoz baskın · 0,4–0,8 artmış + normal AA’lı asidoz birlikte · 0,8–2,0 saf artmış AA’lı asidoz (DKA’da ~1, laktikte ~1,6) · > 2 eşlik eden metabolik alkaloz veya önceden var olan kronik solunumsal asidoz. Ayarlar’dan sunumdaki basit kurala geçilebilir.'
-              : 'Sunumdaki basit kural: ≈ 1 saf artmış AA’lı asidoz · < 1 eşlik eden hiperkloremik asidoz · > 1 eşlik eden metabolik alkaloz (± 0,2 tolerans uygulandı).',
-          source: st.deltaMode === 'genis' ? SRC.rastegar : 'Sunum (Dr. G. Aksel) – delta-delta açığı.',
+              ? '< 0,4 hiperkloremik (normal AA’lı) asidoz baskın · 0,4–0,8 artmış + normal AA’lı asidoz birlikte · 0,8–2,0 saf artmış AA’lı asidoz (DKA’da ~1, laktikte ~1,6) · > 2 eşlik eden metabolik alkaloz veya önceden var olan kronik solunumsal asidoz. Ayarlar’dan klasik basit kurala geçilebilir.'
+              : 'Klasik basit kural: ≈ 1 saf artmış AA’lı asidoz · < 1 eşlik eden hiperkloremik asidoz · > 1 eşlik eden metabolik alkaloz (± 0,2 tolerans uygulandı).',
+          source: st.deltaMode === 'genis' ? SRC.rastegar : 'Aygencel G. Türk Kardiyol Dern Arş 2014;42:194-202; Börekçi Ş, Umut S. Türk Toraks Derg 2011;12(Ek 1):5-9.',
         };
         calcs.push({ label: 'Delta oranı (ΔAA/ΔHCO₃⁻)', value: f2(r), how });
         calcs.push({
@@ -731,7 +743,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
         } else if (r <= hi) {
           agLines.push({
             tone: 'ok',
-            text: `Δ/Δ ${f2(r)}: saf artmış AA’lı metabolik asidoz ile uyumlu.${st.deltaMode === 'genis' && r > 1.2 ? ' (Sunumdaki basit kurala göre > 1 eşlik eden metabolik alkaloz olarak yorumlanır; laktik asidozda oran ~1,6 olabilir — kusma/diüretik öyküsü varsa metabolik alkalozu düşünün.)' : ''}`,
+            text: `Δ/Δ ${f2(r)}: saf artmış AA’lı metabolik asidoz ile uyumlu.${st.deltaMode === 'genis' && r > 1.2 ? ' (Klasik basit kurala göre > 1 eşlik eden metabolik alkaloz olarak yorumlanır; laktik asidozda oran ~1,6 olabilir — kusma/diüretik öyküsü varsa metabolik alkalozu düşünün.)' : ''}`,
             how,
           });
         } else {
@@ -838,7 +850,7 @@ export function analyze(inp: Inputs, st: Settings = DEFAULT_SETTINGS): Result {
         text: resp
           ? `İdrar Cl⁻ ${f1(inp.uCl)} (< 20): klora yanıtlı metabolik alkaloz — kusma, NG drenaj, geçmiş diüretik, posthiperkapni.`
           : `İdrar Cl⁻ ${f1(inp.uCl)} (≥ 20): klora dirençli — ${inp.bp === 'hipertansif' ? 'hipertansif: mineralokortikoid fazlalığı (Conn, Cushing, renal arter stenozu)' : inp.bp === 'normotansif' ? 'normotansif: aktif diüretik, Bartter/Gitelman, ağır hipokalemi' : 'tansiyon durumunu seçin (hipertansif → mineralokortikoid; normotansif → diüretik/Bartter/Gitelman)'}.`,
-        how: { formula: 'İdrar Cl⁻ < 20 mmol/L → klora (serum fizyolojik) yanıtlı ; ≥ 20 → klora dirençli. Sunumdaki eski eşik < 10 / > 10.', source: SRC.galla },
+        how: { formula: 'İdrar Cl⁻ < 20 mmol/L → klora (serum fizyolojik) yanıtlı ; ≥ 20 → klora dirençli. Bazı kaynaklarda eşik 10 mmol/L olarak geçer.', source: SRC.galla },
       });
     } else missing.push({ fields: 'İdrar Cl⁻ (+ tansiyon durumu)', reason: 'Metabolik alkalozun nedenini ayırmak için' });
   }

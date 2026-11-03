@@ -254,3 +254,57 @@ button { cursor: pointer; }
   .ctx-row select, .ctx-row input { max-width: none; }
   .how-row { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* ===== v2: belirgin ana sonuç, sade ayrıntılar ===== */
+.brand { color: inherit; text-decoration: none; border-radius: 12px; }
+.brand:hover .brand-name { color: #c8102e; }
+
+.hero { border-radius: 18px; padding: 18px 20px 16px; color: #fff; box-shadow: 0 10px 30px rgba(0, 20, 71, .18); }
+.hero-acid { background: linear-gradient(135deg, #c8102e, #8f0b22); }
+.hero-alk { background: linear-gradient(135deg, #1f5fbf, #133d7d); }
+.hero-mixed { background: linear-gradient(135deg, #c8102e 0%, #5a1f6e 50%, #1f5fbf 100%); }
+.hero-normal { background: linear-gradient(135deg, #1d7a4a, #125234); }
+.hero-neutral { background: linear-gradient(135deg, #2a3557, #001447); }
+.hero-k { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.hero-h { margin: 6px 0 12px; font-size: 25px; line-height: 1.25; font-weight: 800; }
+.hero-vals { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; font-family: var(--mono); font-size: 18px; font-weight: 700; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, .22); margin-bottom: 12px; }
+.hero-vals small { font-family: system-ui, sans-serif; font-size: 11.5px; font-weight: 600; opacity: .8; margin-right: 5px; }
+.hero-vals em { font-family: system-ui, sans-serif; font-size: 12px; font-style: normal; opacity: .85; background: rgba(255, 255, 255, .16); padding: 1px 8px; border-radius: 99px; }
+.hero-dis { display: flex; flex-direction: column; gap: 7px; }
+.hdis { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; color: #fff; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .28); border-radius: 12px; padding: 9px 12px; transition: background .15s; }
+.hdis:hover { background: rgba(255, 255, 255, .26); }
+.hdis.role-olası { border-style: dashed; background: transparent; }
+.hdis-role { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: rgba(255, 255, 255, .92); white-space: nowrap; }
+.hdis.acid .hdis-role { color: #a50d26; }
+.hdis.alk .hdis-role { color: #1a4f9f; }
+.hdis.oxy .hdis-role { color: #8a4f00; }
+.hdis-label { font-weight: 650; font-size: 15px; }
+.hdis-go { font-size: 12.5px; font-weight: 700; opacity: .9; white-space: nowrap; }
+
+.sec-label { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 6px 2px -4px; }
+.results .step { box-shadow: none; padding: 12px 14px; }
+.results .step h3 { font-size: 14px; color: var(--ink-2); }
+.results .line { font-size: 14px; }
+
+details.missing { padding: 10px 14px; }
+details.missing summary, details.calc-box summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+details.missing summary::-webkit-details-marker, details.calc-box summary::-webkit-details-marker { display: none; }
+details.missing summary::after, details.calc-box summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+details.missing:not([open]) summary::after, details.calc-box:not([open]) summary::after { transform: rotate(-90deg); }
+details.missing summary b { color: var(--warn); font-size: 14px; }
+details.missing summary span { color: var(--ink-2); font-size: 12.5px; }
+details.missing ul { margin-top: 8px; }
+details.calc-box { box-shadow: none; padding: 12px 14px; }
+details.calc-box summary b { font-size: 14px; }
+details.calc-box[open] summary { margin-bottom: 10px; }
+
+.how summary { color: var(--muted); font-weight: 500; font-size: 12px; }
+.how summary:hover, .how[open] summary { color: var(--blue); }
+.how summary::before { width: 13px; height: 13px; font-size: 10px; }
+
+@media (max-width: 560px) {
+  .hero { padding: 16px; }
+  .hero-h { font-size: 21px; }
+  .hdis { grid-template-columns: auto 1fr; }
+  .hdis-go { display: none; }
+}

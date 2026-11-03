@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { analyze, DEFAULT_SETTINGS, type BP, type Chronicity, type DisorderKey, type How, type Inputs, type Line, type Sample, type Settings, type Tone } from './engine';
+import { analyze, DEFAULT_SETTINGS, type BP, type Chronicity, type DisorderKey, type How, type Inputs, type Line, type Sample, type Settings } from './engine';
 import { GROUPS, ALL_FIELDS, fieldKeysFor, type Field } from './fields';
 import { CAUSES, contextHints } from './causes';
 import { CASES } from './cases';
@@ -77,7 +77,7 @@ export default function App() {
   }, [units, settings, open]);
 
   useEffect(() => {
-    // ?vaka=1..6 → sunumdaki vakayı yükle (eğitimde link paylaşımı için)
+    // ?vaka=1..6 → eğitim vakasını yükle (eğitimde link paylaşımı için)
     const n = Number(new URLSearchParams(window.location.search).get('vaka'));
     if (n >= 1 && n <= CASES.length) loadCase(n - 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,7 +120,7 @@ export default function App() {
     setChron('bilinmiyor');
     setBp('bilinmiyor');
     setFlags({ shock: false, trauma: false, smoker: false });
-    setCaseInfo(`${c.name}: ${c.story} — Sunumdaki yanıt: ${c.answer}`);
+    setCaseInfo(`${c.name}: ${c.story} — Beklenen yorum: ${c.answer}`);
     setOpen((o) => ({ ...o, temel: true, oksijen: true, elektrolit: true }));
   };
   const clearAll = () => {
@@ -129,6 +129,13 @@ export default function App() {
     setBp('bilinmiyor');
     setFlags({ shock: false, trauma: false, smoker: false });
     setCaseInfo(null);
+  };
+  const goHome = () => {
+    clearAll();
+    setModal(null);
+    setSample(null);
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+    window.scrollTo({ top: 0 });
   };
   const focusField = (keys: (keyof Inputs)[]) => {
     const k = keys[0] as string | undefined;
@@ -148,7 +155,7 @@ export default function App() {
   if (!sample) {
     return (
       <div className="app">
-        <Header onInfo={() => setModal({ t: 'info', tab: 'sistem' })} onSettings={() => setModal({ t: 'settings' })} />
+        <Header onHome={goHome} onInfo={() => setModal({ t: 'info', tab: 'sistem' })} onSettings={() => setModal({ t: 'settings' })} />
         <main className="pick">
           <h1>Kan gazı örneği</h1>
           <p className="muted">Yorumlamaya başlamak için örneğin tipini seçin.</p>
@@ -183,7 +190,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header onInfo={() => setModal({ t: 'info', tab: 'sistem' })} onSettings={() => setModal({ t: 'settings' })} />
+      <Header onHome={goHome} onInfo={() => setModal({ t: 'info', tab: 'sistem' })} onSettings={() => setModal({ t: 'settings' })} />
       <div className="toolbar">
         <div className="seg" role="radiogroup" aria-label="Örnek tipi">
           <button role="radio" aria-checked={!isVen} className={!isVen ? 'on arter' : ''} onClick={() => setSample('arter')}>Arter</button>
@@ -259,16 +266,16 @@ export default function App() {
   );
 }
 
-function Header({ onInfo, onSettings }: { onInfo: () => void; onSettings: () => void }) {
+function Header({ onHome, onInfo, onSettings }: { onHome: () => void; onInfo: () => void; onSettings: () => void }) {
   return (
     <header className="hdr">
-      <div className="brand">
+      <a className="brand" href="./" onClick={(e) => { e.preventDefault(); onHome(); }} aria-label="ÜKAG ana sayfa">
         <span className="logo-tile"><img src="./logo-240.png" alt="Ümraniye Acil logosu" /></span>
         <div>
           <div className="brand-name">ÜKAG</div>
           <div className="brand-sub">Ümraniye Kan Gazı · yorumlama asistanı</div>
         </div>
-      </div>
+      </a>
       <nav className="hdr-actions">
         <button className="icon-btn" onClick={onInfo} aria-label="Bilgi ve kaynaklar">ⓘ<span> Bilgi</span></button>
         <button className="icon-btn" onClick={onSettings} aria-label="Ayarlar">⚙<span> Ayarlar</span></button>
@@ -321,25 +328,35 @@ function Results({ res, inputs, chronicity, setChron, onCauses, onFocus, onInfo 
     );
   }
   const main = res.disorders;
-  const abTone: Tone = main.some((d) => d.key !== 'hypox' && d.role !== 'olası') ? 'bad' : 'ok';
+  const firm = main.filter((d) => d.key !== 'hypox' && d.role !== 'olası');
+  const hasAcid = firm.some((d) => KIND[d.key] === 'acid');
+  const hasAlk = firm.some((d) => KIND[d.key] === 'alk');
+  const heroKind = !res.usedABG ? 'neutral' : hasAcid && hasAlk ? 'mixed' : hasAcid ? 'acid' : hasAlk ? 'alk' : 'normal';
+  const u = res.usedABG;
+  const fmtN = (x: number, d: number) => x.toFixed(d).replace('.', ',');
   return (
     <>
-      <div className={`card verdict tone-${abTone}`}>
-        <div className="verdict-k">{inputs.sample === 'ven' ? 'Venöz kan gazı' : 'Arter kan gazı'} · nihai yorum</div>
-        <h2 className="verdict-h">{res.headline || 'Yorum için temel değerler eksik'}</h2>
+      <div className={`hero hero-${heroKind}`}>
+        <div className="hero-k">{inputs.sample === 'ven' ? 'Venöz kan gazı' : 'Arter kan gazı'} · Sonuç</div>
+        <h2 className="hero-h">{res.headline || 'Yorum için temel değerler eksik'}</h2>
+        {u && (
+          <div className="hero-vals">
+            <span><small>pH</small>{fmtN(u.pH, 2)}</span>
+            <span><small>pCO₂</small>{fmtN(u.pCO2, 1)}</span>
+            <span><small>HCO₃⁻</small>{fmtN(u.HCO3, 1)}</span>
+            {u.estimated && <em>tahmini arteriyel</em>}
+          </div>
+        )}
         {main.length > 0 && (
-          <>
-            <div className="dis-list">
-              {main.map((d) => (
-                <button key={d.key} className={`dis ${KIND[d.key]} role-${d.role.replace(' ', '-')}`} onClick={() => onCauses(d.key)}>
-                  <span className="dis-role">{ROLE_TXT[d.role]}</span>
-                  <span className="dis-label">{d.label}</span>
-                  <span className="dis-go">Olası nedenler →</span>
-                </button>
-              ))}
-            </div>
-            <p className="tiny muted">Bir bozukluğa dokunarak olası nedenleri ve bu hastanın verilerine göre öne çıkanları görün.</p>
-          </>
+          <div className="hero-dis">
+            {main.map((d) => (
+              <button key={d.key} className={`hdis ${KIND[d.key]} role-${d.role.replace(' ', '-')}`} onClick={() => onCauses(d.key)}>
+                <span className="hdis-role">{ROLE_TXT[d.role]}</span>
+                <span className="hdis-label">{d.label}</span>
+                <span className="hdis-go">Nedenler ›</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -368,8 +385,11 @@ function Results({ res, inputs, chronicity, setChron, onCauses, onFocus, onInfo 
       )}
 
       {res.missing.length > 0 && (
-        <div className="card missing">
-          <h3>Daha kesin yorum için</h3>
+        <details className="card missing">
+          <summary>
+            <b>Daha kesin yorum için {res.missing.length} veri eksik</b>
+            <span>{Array.from(new Set(res.missing.map((m) => m.fields))).slice(0, 3).join(' · ')}{res.missing.length > 3 ? ' …' : ''}</span>
+          </summary>
           <ul>
             {res.missing.map((m, i) => {
               const keys = fieldKeysFor(m.fields);
@@ -382,9 +402,10 @@ function Results({ res, inputs, chronicity, setChron, onCauses, onFocus, onInfo 
               );
             })}
           </ul>
-        </div>
+        </details>
       )}
 
+      {res.steps.length > 0 && <div className="sec-label">Adım adım değerlendirme</div>}
       {res.steps.map((s) => (
         <div key={s.id} className={`card step tone-${s.tone}`}>
           <h3>{s.title}</h3>
@@ -393,8 +414,8 @@ function Results({ res, inputs, chronicity, setChron, onCauses, onFocus, onInfo 
       ))}
 
       {res.calcs.length > 0 && (
-        <div className="card">
-          <h3>Hesaplamalar</h3>
+        <details className="card calc-box">
+          <summary><b>Hesaplamalar</b> <span className="badge">{res.calcs.length}</span></summary>
           <div className="calcs">
             {res.calcs.map((c, i) => (
               <div key={i} className={`calc tone-${c.tone || 'info'}`}>
@@ -406,7 +427,7 @@ function Results({ res, inputs, chronicity, setChron, onCauses, onFocus, onInfo 
               </div>
             ))}
           </div>
-        </div>
+        </details>
       )}
     </>
   );
@@ -471,18 +492,18 @@ function ModalView({ modal, setModal, settings, setSettings, inputs, res }: {
         <label className="ctx-row"><span>Normal anyon açığı (mmol/L)</span>
           <input inputMode="decimal" value={String(settings.normalAG)} onChange={(e) => { const n = parseNum(e.target.value); if (n !== undefined) setSettings({ ...settings, normalAG: n }); }} />
         </label>
-        <p className="tiny muted">Sunum: 12 ± 4. İyon seçici elektrotlu yeni cihazlarda laboratuvarınızın referansını kullanın. “Artmış” eşiği = normal + 4.</p>
+        <p className="tiny muted">Klasik değer 12 ± 4. İyon seçici elektrotlu yeni cihazlarda laboratuvarınızın referansını kullanın. “Artmış” eşiği = normal + 4.</p>
         <label className="ctx-row"><span>Referans albümin (g/dL)</span>
           <select value={String(settings.refAlbumin)} onChange={(e) => setSettings({ ...settings, refAlbumin: Number(e.target.value) })}>
             <option value="4">4,0 (yaygın kullanım)</option>
             <option value="4.4">4,4 (Figge 1998)</option>
-            <option value="4.5">4,5 (sunum)</option>
+            <option value="4.5">4,5 (bazı Türkçe kaynaklar)</option>
           </select>
         </label>
         <label className="ctx-row"><span>Delta oranı yorumu</span>
           <select value={settings.deltaMode} onChange={(e) => setSettings({ ...settings, deltaMode: e.target.value as Settings['deltaMode'] })}>
             <option value="genis">Genişletilmiş (Rastegar: &lt;0,4 / 0,4–0,8 / 0,8–2 / &gt;2)</option>
-            <option value="klasik">Sunumdaki basit kural (≈1 / &lt;1 / &gt;1)</option>
+            <option value="klasik">Klasik basit kural (≈1 / &lt;1 / &gt;1)</option>
           </select>
         </label>
         <label className="check-row"><input type="checkbox" checked={settings.venousCorrection} onChange={(e) => setSettings({ ...settings, venousCorrection: e.target.checked })} />

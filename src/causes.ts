@@ -18,7 +18,7 @@ export const CAUSES: Record<DisorderKey, CauseSet> = {
   HAGMA: {
     title: 'Artmış anyon açıklı metabolik asidoz',
     intro: 'Ölçülmeyen bir asidin (laktat, keton, toksik alkol metaboliti, üremik anyonlar) birikimi. Klor normaldir; HCO₃⁻ bu asitleri tamponlarken tükenir.',
-    mnemonic: 'CAT MUDPILES (sunum) · GOLDMARK (Mehta 2008): Glikoller, 5-Oksoprolin, L-laktat, D-laktat, Metanol, Aspirin, Renal yetmezlik, Ketoasidoz',
+    mnemonic: 'CAT MUDPILES · GOLDMARK (Mehta 2008): Glikoller, 5-Oksoprolin, L-laktat, D-laktat, Metanol, Aspirin, Renal yetmezlik, Ketoasidoz',
     groups: [
       { name: 'Laktik asidoz — Tip A (doku hipoksisi)', items: ['Şok (septik, hipovolemik, kardiyojenik)', 'Ağır hipoksemi, ağır anemi', 'Karbonmonoksit zehirlenmesi', 'Siyanür zehirlenmesi (yangın dumanı, nitroprusid)', 'Mezenter iskemi, kompartman sendromu', 'Nöbet, aşırı kas aktivitesi'] },
       { name: 'Laktik asidoz — Tip B (hipoksi dışı)', items: ['Metformin', 'Karaciğer yetmezliği', 'Tiamin eksikliği', 'Malignite (lösemi, lenfoma)', 'Linezolid, propofol infüzyon sendromu, NRTİ', 'β-agonist (salbutamol) ve adrenalin', 'D-laktik asidoz (kısa barsak sendromu)'] },
@@ -63,7 +63,7 @@ export const CAUSES: Record<DisorderKey, CauseSet> = {
       { name: 'Alkali yüklenmesi', items: ['Bikarbonat tedavisi', 'Süt-alkali sendromu (kalsiyum karbonat)', 'Masif transfüzyon (sitrat)', 'Ketoasidoz/laktik asidoz sonrası rebound'] },
     ],
     workup: ['İdrar Cl⁻ (diüretik etkisinden bağımsız ayrım için)', 'Tansiyon / hacim durumu', 'Serum K⁺, Mg²⁺', 'Kusma, NG, diüretik öyküsü'],
-    sources: ['Galla JH. J Am Soc Nephrol 2000;11:369-75.', 'Emmett M. Clin J Am Soc Nephrol 2020;15:1848-56.', 'Sunum (Dr. G. Aksel) – algoritma.'],
+    sources: ['Galla JH. J Am Soc Nephrol 2000;11:369-75.', 'Emmett M. Clin J Am Soc Nephrol 2020;15:1848-56.'],
   },
   RAc: {
     title: 'Solunumsal asidoz',

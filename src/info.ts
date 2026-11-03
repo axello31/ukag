@@ -9,7 +9,7 @@ export const INFO: InfoTab[] = [
     id: 'sistem',
     title: 'Sistematik okuma',
     blocks: [
-      { p: 'ÜKAG, sunumdaki üç basamaklı sistematik yaklaşımı uygular:' },
+      { p: 'ÜKAG, üç basamaklı sistematik okuma yaklaşımını uygular:' },
       { h: '1 · Oksijenasyon', p: 'PaO₂, SaO₂; FiO₂ girilirse P/F oranı ve A-a gradyanı.' },
       { h: '2 · Ventilasyon', p: 'PaCO₂ > 45 hipoventilasyon, < 35 hiperventilasyon.' },
       {
@@ -84,7 +84,7 @@ export const INFO: InfoTab[] = [
     id: 'kaynak',
     title: 'Kanıt ve kaynaklar',
     blocks: [
-      { p: 'Temel içerik: Dr. Gökhan Aksel, “Kan Gazı Yorumlama” sunumu (Ümraniye EAH Acil Tıp). Eksik kısımlar aşağıdaki hakemli kaynaklardan tamamlanmıştır.' },
+      { p: 'Hazırlayan: Dr. Gökhan Aksel (Ümraniye EAH Acil Tıp). Hesaplama ve yorum kuralları aşağıdaki hakemli kaynaklara dayanır.' },
       {
         list: [
           'Berend K, de Vries APJ, Gans ROB. Physiological approach to assessment of acid-base disturbances. N Engl J Med 2014;371:1434-45.',
