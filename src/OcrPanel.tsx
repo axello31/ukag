@@ -3,10 +3,12 @@ import type { Inputs } from './engine';
 import { ALL_FIELDS, flipSign } from './fields';
 import { parseTexts } from './ocr';
 import { log, readLog, type OcrOut } from './ocrRun';
+import Cropper, { type Rect } from './Cropper';
 
 export interface Applied { key: keyof Inputs; value: string; unitIdx: number }
 
-interface Photo { id: number; file?: Blob; thumb?: string; status: 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
+// yeni → çözülüyor → kırp (kullanıcı) → bekliyor → okunuyor → tamam/hata
+interface Photo { id: number; file?: Blob; blob?: Blob; url?: string; thumb?: string; status: 'yeni' | 'çözülüyor' | 'kırp' | 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
 interface Edit { on: boolean; value: string; unitIdx: number }
 
 const FIELD = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
@@ -14,6 +16,7 @@ const STATUS: Record<string, string> = {
   model: 'OCR modeli indiriliyor (yalnızca ilk sefer, ~25 MB)',
   hazırlanıyor: 'Hazırlanıyor',
   okunuyor: 'Metin okunuyor',
+  döndürülüyor: 'Az değer bulundu, foto döndürülüp yeniden okunuyor',
 };
 let seq = 0;
 
@@ -26,19 +29,56 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   const add = (fl: FileList | Blob[] | null) => {
     if (!fl) return;
     // Yalnızca dosya referansı tutulur; çözme/küçültme sırası gelince, tek tek yapılır
-    const ps = Array.from(fl).filter((f) => f.type.startsWith('image/') || !f.type).map((file) => ({ id: ++seq, file, status: 'bekliyor' as const, p: 0, msg: 'Sırada' }));
+    const ps = Array.from(fl).filter((f) => f.type.startsWith('image/') || !f.type).map((file) => ({ id: ++seq, file, status: 'yeni' as const, p: 0, msg: 'Sırada' }));
     log(`${ps.length} foto eklendi`);
     setPhotos((x) => [...x, ...ps]);
   };
   const patch = (id: number, p: Partial<Photo>) => setPhotos((x) => x.map((ph) => (ph.id === id ? { ...ph, ...p } : ph)));
 
+  // Fotoğrafları sırayla çöz/küçült (orijinal bellekte tutulmaz), sonra kırpma ekranına ver
+  useEffect(() => {
+    if (photos.some((p) => p.status === 'çözülüyor')) return;
+    const next = photos.find((p) => p.status === 'yeni');
+    if (!next) return;
+    const file = next.file!;
+    patch(next.id, { status: 'çözülüyor', msg: 'Foto hazırlanıyor', file: undefined });
+    import('./ocrRun')
+      .then(({ shrink }) => shrink(file))
+      .then(({ blob, thumb }) => patch(next.id, { status: 'kırp', blob, thumb, url: URL.createObjectURL(blob), msg: 'Kırpılmayı bekliyor' }))
+      .catch((e) => {
+        log('hata: ' + e);
+        patch(next.id, { status: 'hata', msg: 'Foto açılamadı' });
+      });
+  }, [photos]);
+
+  const cropping = photos.find((p) => p.status === 'kırp' && p.url);
+  const finishCrop = (ph: Photo, r: Rect | null) => {
+    URL.revokeObjectURL(ph.url!);
+    if (!r) return patch(ph.id, { status: 'bekliyor', url: undefined, msg: 'Sırada' });
+    patch(ph.id, { status: 'çözülüyor', url: undefined, msg: 'Kırpılıyor' });
+    import('./ocrRun')
+      .then(({ edit }) => edit(ph.blob!, 0, r))
+      .then((b) => patch(ph.id, { blob: b, status: 'bekliyor', msg: 'Sırada' }))
+      .catch(() => patch(ph.id, { status: 'bekliyor', msg: 'Sırada' })); // kırpılamazsa tamamı okunur
+  };
+  const remove = (ph: Photo) => {
+    if (ph.url) URL.revokeObjectURL(ph.url);
+    setPhotos((x) => x.filter((y) => y.id !== ph.id));
+  };
+  const rotate = (ph: Photo) => {
+    import('./ocrRun').then(({ edit }) => edit(ph.blob!, 90)).then((b) => {
+      URL.revokeObjectURL(ph.url!);
+      patch(ph.id, { blob: b, url: URL.createObjectURL(b) });
+    });
+  };
+
   // Fotoğrafları sırayla oku
   useEffect(() => {
     if (photos.some((p) => p.status === 'okunuyor')) return;
-    const next = photos.find((p) => p.status === 'bekliyor');
+    const next = photos.find((p) => p.status === 'bekliyor' && p.blob);
     if (!next) return;
-    const file = next.file!;
-    patch(next.id, { status: 'okunuyor', msg: 'Foto küçültülüyor', file: undefined });
+    const blob = next.blob!;
+    patch(next.id, { status: 'okunuyor', msg: 'Hazırlanıyor', blob: undefined });
     let last = { p: -1, s: '' };
     const onProg = (p: number, s: string) => {
       // her ilerleme olayında yeniden çizme — telefonda arayüzü kilitliyor
@@ -47,11 +87,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
       patch(next.id, { p, msg: STATUS[s] || 'Hazırlanıyor' });
     };
     import('./ocrRun')
-      .then(async ({ shrink, recognize }) => {
-        const { blob, thumb } = await shrink(file);
-        patch(next.id, { thumb, msg: 'Hazırlanıyor' });
-        return recognize(blob, onProg);
-      })
+      .then(({ recognize }) => recognize(blob, onProg))
       .then((out) => patch(next.id, { status: 'tamam', out, p: 1, msg: 'Okundu' }))
       .catch((e) => {
         console.error(e);
@@ -60,7 +96,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
       });
   }, [photos]);
 
-  const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
+  const busy = photos.some((p) => p.status !== 'tamam' && p.status !== 'hata');
   useEffect(() => () => void import('./ocrRun').then((m) => m.release()), []);
 
   const [prevLog] = useState(readLog);
@@ -110,7 +146,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
                     <span>{p.msg}</span>
                     {p.status === 'okunuyor' && <span className="ocr-bar"><i style={{ width: `${Math.round(p.p * 100)}%` }} /></span>}
                   </div>
-                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => { setPhotos((x) => x.filter((y) => y.id !== p.id)); }} >×</button>
+                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => remove(p)}>×</button>
                 </div>
               ))}
             </div>
@@ -186,6 +222,10 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         )}
       </div>
     </div>
+      {cropping && (
+        <Cropper url={cropping.url!} index={photos.filter((p) => p.status !== 'yeni' && p.status !== 'kırp' && p.status !== 'çözülüyor').length + 1}
+          total={photos.length} onCrop={(r) => finishCrop(cropping, r)} onRotate={() => rotate(cropping)} onRemove={() => remove(cropping)} />
+      )}
     </>
   );
 }

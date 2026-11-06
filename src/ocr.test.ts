@@ -222,3 +222,7 @@ it('parantezi düşmüş sıcaklık düzeltmeli satırlar atlanır', () => {
   expect(parseLine('PHT 7.34')).toBeNull();
   expect(parseLine('PO2 29.2 mmHg 83-108')).toMatchObject({ key: 'pO2', value: 29.2 });
 });
+
+it('"s" yerine "$" okunan sO2', () => {
+  expect(parseLine('$02 38 95-99')).toMatchObject({ key: 'sO2', value: 38 });
+});

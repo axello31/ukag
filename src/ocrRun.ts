@@ -1,4 +1,4 @@
-import { rowsFromWords, type Word } from './ocr';
+import { parseTexts, rowsFromWords, type Word } from './ocr';
 
 // PaddleOCR (PP-OCRv4, ONNX) yalnızca ilk kullanımda yüklenir; tanıma tamamen tarayıcıda yapılır,
 // görüntü hiçbir yere gönderilmez. Monitör fotoğraflarında (moiré, renkli zemin) Tesseract'tan çok daha isabetli.
@@ -61,17 +61,47 @@ const toBlob = (c: HTMLCanvasElement, type: string, q?: number) =>
  * Fotoğrafı küçült (yön düzeltilir). Orijinal görüntü hemen bırakılır.
  * Dönüş: OCR'a verilecek küçük JPEG ve listede gösterilecek minik önizleme.
  */
+/**
+ * Görüntüyü EXIF yönü uygulanmış olarak çöz. iPhone fotoğrafları sensörden yatay kaydedilir, dik duruş EXIF'tedir;
+ * Safari'de createImageBitmap bunu yok sayabiliyor (metin 90° yan → PaddleOCR okuyamaz). <img> her zaman uygular.
+ */
+async function decode(file: Blob): Promise<{ src: CanvasImageSource; w: number; h: number; done: () => void }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { src: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+  } catch {
+    URL.revokeObjectURL(url);
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
+    return { src: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close() };
+  }
+}
+
+/** Çöz, en fazla MAX_SIDE'a küçült, istenirse döndür (derece: 0/90/180/270) */
+async function draw(file: Blob, deg = 0): Promise<HTMLCanvasElement> {
+  const im = await decode(file);
+  const long = Math.max(im.w, im.h);
+  const scale = long > MAX_SIDE ? MAX_SIDE / long : 1;
+  const w = Math.round(im.w * scale);
+  const h = Math.round(im.h * scale);
+  const c = document.createElement('canvas');
+  const side = deg % 180 !== 0;
+  c.width = side ? h : w;
+  c.height = side ? w : h;
+  const ctx = c.getContext('2d')!;
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(im.src, -w / 2, -h / 2, w, h);
+  im.done();
+  return c;
+}
+
 export async function shrink(file: Blob): Promise<{ blob: Blob; thumb: string }> {
   log(`foto ${Math.round(file.size / 1024)} KB çözülüyor`);
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
-  log(`foto ${bmp.width}×${bmp.height}`);
-  const long = Math.max(bmp.width, bmp.height);
-  const scale = long > MAX_SIDE ? MAX_SIDE / long : 1;
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * scale);
-  c.height = Math.round(bmp.height * scale);
-  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
-  bmp.close();
+  const c = await draw(file);
+  log(`foto ${c.width}×${c.height}`);
 
   const t = document.createElement('canvas');
   const ts = 112 / Math.max(c.width, c.height);
@@ -87,15 +117,28 @@ export async function shrink(file: Blob): Promise<{ blob: Blob; thumb: string }>
   return { blob, thumb };
 }
 
+/** Döndür ve/veya kırp (r: döndürülmüş görüntüye göre 0–1) */
+export async function edit(blob: Blob, deg: number, r?: { x: number; y: number; w: number; h: number } | null): Promise<Blob> {
+  const c = await draw(blob, deg);
+  let out = c;
+  if (r) {
+    out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(r.w * c.width));
+    out.height = Math.max(1, Math.round(r.h * c.height));
+    out.getContext('2d')!.drawImage(c, r.x * c.width, r.y * c.height, out.width, out.height, 0, 0, out.width, out.height);
+    c.width = c.height = 0;
+  }
+  const b = await toBlob(out, 'image/jpeg', 0.92);
+  out.width = out.height = 0;
+  return b;
+}
+
 export interface OcrOut {
   texts: string[]; // satırlara dizilmiş metin (etiket · değer · birim aynı satırda)
   text: string; // gösterim için
 }
 
-export async function recognize(blob: Blob, progress: (p: number, status: string) => void): Promise<OcrOut> {
-  progress(0.1, engineP ? 'hazırlanıyor' : 'model');
-  const engine = await getEngine();
-  progress(0.4, 'okunuyor');
+async function readOnce(engine: Engine, blob: Blob): Promise<string> {
   const url = URL.createObjectURL(blob);
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 180000));
   try {
@@ -110,11 +153,35 @@ export async function recognize(blob: Blob, progress: (p: number, status: string
         return { text: l.text, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
       });
     log(`okundu: ${words.length} kutu, ${Date.now() - t0} ms`);
-    const rows = rowsFromWords(words);
-    return { texts: [rows], text: rows };
+    return rowsFromWords(words);
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+export async function recognize(blob: Blob, progress: (p: number, status: string) => void): Promise<OcrOut> {
+  progress(0.1, engineP ? 'hazırlanıyor' : 'model');
+  const engine = await getEngine();
+  progress(0.4, 'okunuyor');
+  let best = await readOnce(engine, blob);
+  let n = parseTexts([best]).length;
+  log(`0°: ${n} değer`);
+  // Az değer çıktıysa foto yan/ters olabilir: döndürüp yeniden dene, en çok değer bulan yönü al
+  for (const deg of [90, 270, 180]) {
+    if (n >= 4) break;
+    progress(0.4 + deg / 600, 'döndürülüyor');
+    const c = await draw(blob, deg);
+    const b = await toBlob(c, 'image/jpeg', 0.92);
+    c.width = c.height = 0;
+    const t = await readOnce(engine, b);
+    const k = parseTexts([t]).length;
+    log(`${deg}°: ${k} değer`);
+    if (k > n) {
+      best = t;
+      n = k;
+    }
+  }
+  return { texts: [best], text: best };
 }
 
 /** Panel kapanınca motoru bırak (model ~50 MB bellek tutar) */

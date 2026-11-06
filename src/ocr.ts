@@ -37,7 +37,7 @@ const PATS: Pat[] = [
   { key: 'BE', re: new RegExp(NB + '(?:a?s?be(?![a-z])|c\\s*base|baz\\s*(?:fazla|a[cç])|base\\s*exc)'), low: /\(b\)|\bab?e\b/ },
   { key: 'COHb', re: /c\s*[o0]\s*hb|karboksi/ },
   { key: 'MetHb', re: /met\s*hb|methem/ },
-  { key: 'sO2', re: new RegExp(NB + '(?:c?s\\s*[o0]\\s*' + O2 + '|[o0]2\\s*sat|satur)'), skip: /sp\s*[o0]2/ },
+  { key: 'sO2', re: new RegExp(NB + '(?:c?[s$]\\s*[o0]\\s*' + O2 + '|[o0]2\\s*sat|satur)'), skip: /sp\s*[o0]2/ },
   { key: 'SpO2', re: /sp\s*[o0]\s*2/ },
   { key: 'FiO2', re: new RegExp(NB + '(?:f\\s*[i1l]\\s*[o0]\\s*2|f\\s*[o0]\\s*2\\s*\\(i\\))'), skip: /ratio|oran|\/|p\s*[o0]\s*2/ },
   { key: 'patm', re: new RegExp(NB + '(?:baro|atm(?![a-z])|atmosfer)') },
