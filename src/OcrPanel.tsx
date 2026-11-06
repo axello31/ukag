@@ -3,10 +3,11 @@ import type { Inputs } from './engine';
 import { ALL_FIELDS } from './fields';
 import { parseTexts } from './ocr';
 import { log, readLog, type OcrOut } from './ocrRun';
+import Camera, { canUseCamera } from './Camera';
 
 export interface Applied { key: keyof Inputs; value: string; unitIdx: number }
 
-interface Photo { id: number; file?: File; thumb?: string; status: 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
+interface Photo { id: number; file?: Blob; thumb?: string; status: 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
 interface Edit { on: boolean; value: string; unitIdx: number }
 
 const FIELD = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
@@ -24,8 +25,11 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const camRef = useRef<HTMLInputElement>(null);
   const galRef = useRef<HTMLInputElement>(null);
+  const [cam, setCam] = useState(false);
+  const [camShots, setCamShots] = useState(0);
+  const [camErr, setCamErr] = useState<string | null>(null);
 
-  const add = (fl: FileList | null) => {
+  const add = (fl: FileList | Blob[] | null) => {
     if (!fl) return;
     // Yalnızca dosya referansı tutulur; çözme/küçültme sırası gelince, tek tek yapılır
     const ps = Array.from(fl).filter((f) => f.type.startsWith('image/') || !f.type).map((file) => ({ id: ++seq, file, status: 'bekliyor' as const, p: 0, msg: 'Sırada' }));
@@ -36,6 +40,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
 
   // Fotoğrafları sırayla oku
   useEffect(() => {
+    if (cam) return; // kamera açıkken okuma bekler (telefon belleği)
     if (photos.some((p) => p.status === 'okunuyor')) return;
     const next = photos.find((p) => p.status === 'bekliyor');
     if (!next) return;
@@ -60,7 +65,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         log('hata: ' + e);
         patch(next.id, { status: 'hata', msg: navigator.onLine ? 'Okunamadı' : 'İlk kullanımda internet gerekli' });
       });
-  }, [photos]);
+  }, [photos, cam]);
 
   const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
   useEffect(() => {
@@ -86,6 +91,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   };
 
   return (
+    <>
     <div className="modal-bg" onClick={onClose}>
       <div className="modal ocr" role="dialog" aria-modal="true" aria-label="Fotoğraftan oku" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
@@ -96,13 +102,14 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
           <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
           <input ref={galRef} type="file" accept="image/*" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
           <div className="ocr-actions">
-            <button className="ocr-btn primary" onClick={() => camRef.current?.click()}>📷 {photos.length ? 'Bir foto daha çek' : 'Fotoğraf çek'}</button>
+            <button className="ocr-btn primary" onClick={() => { setCamErr(null); if (canUseCamera()) { setCamShots(0); setCam(true); } else camRef.current?.click(); }}>📷 {photos.length ? 'Bir foto daha çek' : 'Fotoğraf çek'}</button>
             <button className="ocr-btn" onClick={() => galRef.current?.click()}>🖼 Galeriden seç</button>
           </div>
+          {camErr && <p className="tiny warn-t">{camErr}</p>}
           {!photos.length && (
             <ul className="ocr-tips">
               <li>Lab ekranını veya kan gazı cihazı çıktısını <b>dik açıyla, yakından ve parlamasız</b> çekin; değer tablosu kadraja tam sığsın.</li>
-              <li>Değerler birden fazla ekrandaysa her birini ayrı çekin; hepsi birleştirilir. En sorunsuz yol: önce telefonun kamerasıyla hepsini çekip <b>Galeriden seç</b> ile birlikte seçmek.</li>
+              <li>Değerler birden fazla ekrandaysa her birini ayrı çekin; hepsi birleştirilir. Kamera açık kalır; peş peşe çekip <b>Bitti</b>’ye basın.</li>
               <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR dil verisi (~5 MB) bir kez indirilir.</li>
             </ul>
           )}
@@ -178,5 +185,10 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         </div>
       </div>
     </div>
+      {cam && (
+        <Camera count={camShots} onShot={(b) => { setCamShots((n) => n + 1); add([b]); }} onDone={() => setCam(false)}
+          onFail={(m) => { setCam(false); setCamErr(m); }} />
+      )}
+    </>
   );
 }
