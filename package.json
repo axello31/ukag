@@ -11,9 +11,10 @@
     "deploy": "npm run build && gh-pages -d dist -t"
   },
   "dependencies": {
+    "@gutenye/ocr-browser": "1.4.9",
+    "onnxruntime-web": "1.31.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tesseract.js": "6.0.1"
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/react": "18.3.12",

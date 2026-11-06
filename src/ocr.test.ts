@@ -185,3 +185,40 @@ describe('iPhone fotoğraflarındaki hatalar (15:05)', () => {
 it('uzun Türkçe etiket satır ortasında da tanınır', () => {
   expect(parseLine('YA | | Arteriyel kanda glukoz 70 mg/dL 70 - 105')).toMatchObject({ key: 'glucose', value: 70 });
 });
+
+describe('PaddleOCR çıktısı (gerçek fotoğraf satırları)', () => {
+  it('parantez içi sayı değer değildir; hemogram bölümü okunmaz', () => {
+    const r = parseTexts([`ABE -12.9 mmol/L
+SBE -13.9 mmol/L
+CHC03(6) 11.8 mmol/L
+HCO3-std 13.5
+Tam Kan (Hemogram)
+Tetkik Ad Tetkk Sonucu Birim Bekenen Dege
+PH 7.48 7.350-7.450`]);
+    expect(Object.fromEntries(r.map((f) => [f.key, f.value]))).toEqual({ HCO3: 11.8, BE: -13.9 });
+  });
+  it('kan gazı ekranı', () => {
+    const r = parseTexts([`PH 7.34 7.350-7.450
+PCO2 22.4 mmHg 35-48
+PO2 29.2 mmHg 83-108
+PCO2(T） 22.4 mmHg
+Hct 15
+tHb 5 g/dL 12 -17.5
+s02 38 95-99
+FO2Hb 37.2 94.0-98.0
+tBi 12.7 mg/dL
+PH(T) 7.34
+p50c 34.3 mmHg
+ABE -12.9 mmol/L
+SBE -13.9 mmol/L
+dHCO3(p） 11.8 mmol/L`]);
+    expect(Object.fromEntries(r.map((f) => [f.key, f.value]))).toEqual({ pH: 7.34, pCO2: 22.4, HCO3: 11.8, BE: -13.9, pO2: 29.2, sO2: 38, Hb: 5 });
+  });
+});
+
+it('parantezi düşmüş sıcaklık düzeltmeli satırlar atlanır', () => {
+  expect(parseLine('PO2T 29.2 mmHg')).toBeNull();
+  expect(parseLine('PCO2T 22.4 mmHg')).toBeNull();
+  expect(parseLine('PHT 7.34')).toBeNull();
+  expect(parseLine('PO2 29.2 mmHg 83-108')).toMatchObject({ key: 'pO2', value: 29.2 });
+});

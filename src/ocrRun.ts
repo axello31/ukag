@@ -1,10 +1,12 @@
-import type { Worker } from 'tesseract.js';
 import { rowsFromWords, type Word } from './ocr';
 
-// Tesseract.js yalnızca ilk kullanımda yüklenir; tanıma tamamen tarayıcıda yapılır, görüntü hiçbir yere gönderilmez.
+// PaddleOCR (PP-OCRv4, ONNX) yalnızca ilk kullanımda yüklenir; tanıma tamamen tarayıcıda yapılır,
+// görüntü hiçbir yere gönderilmez. Monitör fotoğraflarında (moiré, renkli zemin) Tesseract'tan çok daha isabetli.
 // iPhone Safari'nin bellek sınırı dar: tam çözünürlüklü foto hiçbir zaman bellekte tutulmaz, hemen küçültülür.
 
-const MAX_SIDE = 1800;
+const MAX_SIDE = 2048;
+const MODELS = 'https://cdn.jsdelivr.net/npm/@gutenye/ocr-models@1.4.2/assets/';
+const ORT_WASM = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
 const LOG = 'ukag_ocr_log';
 
 /** Kısa tanı günlüğü — sayfa donup yenilenirse son adımlar görülebilsin */
@@ -25,43 +27,50 @@ export function readLog(): string[] {
   }
 }
 
-let workerP: Promise<Worker> | null = null;
-let onProgress: ((p: number, status: string) => void) | null = null;
+type Engine = { detect: (url: string) => Promise<{ texts: { text: string; box?: number[][] }[] }> };
+let engineP: Promise<Engine> | null = null;
 
-function getWorker(): Promise<Worker> {
-  if (!workerP) {
-    log('motor başlatılıyor');
-    workerP = import('tesseract.js').then(({ createWorker }) =>
-      createWorker('eng', 1, {
-        logger: (m) => onProgress?.(m.progress, m.status),
-      }),
-    );
-    workerP.catch((e) => {
+function getEngine(): Promise<Engine> {
+  if (!engineP) {
+    log('motor yükleniyor');
+    engineP = Promise.all([import('onnxruntime-web'), import('@gutenye/ocr-browser')]).then(async ([ort, { default: Ocr }]) => {
+      ort.env.wasm.wasmPaths = ORT_WASM;
+      ort.env.wasm.numThreads = 1; // iOS'ta SharedArrayBuffer yok
+      const e = await Ocr.create({
+        models: {
+          detectionPath: MODELS + 'ch_PP-OCRv4_det_infer.onnx',
+          recognitionPath: MODELS + 'ch_PP-OCRv4_rec_infer.onnx',
+          dictionaryPath: MODELS + 'ppocr_keys_v1.txt',
+        },
+      });
+      log('motor hazır');
+      return e as unknown as Engine;
+    });
+    engineP.catch((e) => {
       log('motor hatası: ' + e);
-      workerP = null;
+      engineP = null;
     });
   }
-  return workerP;
+  return engineP;
 }
 
 const toBlob = (c: HTMLCanvasElement, type: string, q?: number) =>
   new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob'))), type, q));
 
 /**
- * Fotoğrafı küçült ve OCR için hazırla (yön, gri ton, kontrast). Orijinal görüntü hemen bırakılır.
- * Dönüş: OCR'a verilecek küçük PNG ve listede gösterilecek minik önizleme.
+ * Fotoğrafı küçült (yön düzeltilir). Orijinal görüntü hemen bırakılır.
+ * Dönüş: OCR'a verilecek küçük JPEG ve listede gösterilecek minik önizleme.
  */
 export async function shrink(file: Blob): Promise<{ blob: Blob; thumb: string }> {
   log(`foto ${Math.round(file.size / 1024)} KB çözülüyor`);
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
   log(`foto ${bmp.width}×${bmp.height}`);
   const long = Math.max(bmp.width, bmp.height);
-  const scale = long > MAX_SIDE ? MAX_SIDE / long : long < 1200 ? 1200 / long : 1;
+  const scale = long > MAX_SIDE ? MAX_SIDE / long : 1;
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * scale);
   c.height = Math.round(bmp.height * scale);
-  const ctx = c.getContext('2d', { willReadFrequently: true })!;
-  ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
 
   const t = document.createElement('canvas');
@@ -72,76 +81,44 @@ export async function shrink(file: Blob): Promise<{ blob: Blob; thumb: string }>
   const thumb = t.toDataURL('image/jpeg', 0.7);
   t.width = t.height = 0;
 
-  const img = ctx.getImageData(0, 0, c.width, c.height);
-  const d = img.data;
-  const hist = new Uint32Array(256);
-  for (let i = 0; i < d.length; i += 4) {
-    const g = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
-    d[i] = g;
-    hist[g | 0]++;
-  }
-  // %1–%99 aralığını 0–255'e ger (soluk ekran fotoğrafları için)
-  const total = d.length / 4;
-  let lo = 0, hi = 255, acc = 0;
-  for (; lo < 255 && (acc += hist[lo]) < total * 0.01; lo++);
-  acc = 0;
-  for (; hi > 0 && (acc += hist[hi]) < total * 0.01; hi--);
-  const span = Math.max(1, hi - lo);
-  let sum = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const v = Math.max(0, Math.min(255, ((d[i] - lo) * 255) / span));
-    d[i] = d[i + 1] = d[i + 2] = v;
-    sum += v;
-  }
-  // Koyu zeminli ekran (açık yazı) → tersine çevir
-  if (sum / total < 110) for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = 255 - d[i];
-  ctx.putImageData(img, 0, 0);
-  const blob = await toBlob(c, 'image/png');
+  const blob = await toBlob(c, 'image/jpeg', 0.92);
   c.width = c.height = 0; // iOS canvas belleğini hemen bırak
   log(`hazır ${Math.round(blob.size / 1024)} KB`);
   return { blob, thumb };
 }
 
 export interface OcrOut {
-  texts: string[]; // her geçiş için: kelimelerden dizilmiş satırlar (sütunlu ekranlar) + Tesseract'ın kendi satırları
-  text: string; // gösterim için ilk geçişin metni
+  texts: string[]; // satırlara dizilmiş metin (etiket · değer · birim aynı satırda)
+  text: string; // gösterim için
 }
-
-// Ekran fotoğraflarında modlar farklı satırları yakalıyor; iki geçişin sonuçları oylanır (ocr.ts parseTexts)
-const PASSES = ['6', '11']; // tek blok · seyrek metin
 
 export async function recognize(blob: Blob, progress: (p: number, status: string) => void): Promise<OcrOut> {
-  const worker = await getWorker();
+  progress(0.1, engineP ? 'hazırlanıyor' : 'model');
+  const engine = await getEngine();
+  progress(0.4, 'okunuyor');
+  const url = URL.createObjectURL(blob);
   const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 180000));
-  const texts: string[] = [];
-  let first = '';
   try {
-    for (let i = 0; i < PASSES.length; i++) {
-      onProgress = (p, s) => progress((i + p) / PASSES.length, s);
-      await worker.setParameters({ tessedit_pageseg_mode: PASSES[i] as never });
-      log(`okunuyor (geçiş ${i + 1})`);
-      const { data } = await Promise.race([worker.recognize(blob, {}, { text: true, blocks: true }), timeout]);
-      const words: Word[] = [];
-      for (const b of data.blocks || [])
-        for (const p of b.paragraphs)
-          for (const l of p.lines)
-            for (const w of l.words) words.push({ text: w.text, ...w.bbox });
-      log(`geçiş ${i + 1}: ${words.length} kelime`);
-      texts.push(rowsFromWords(words), data.text);
-      if (!i) first = data.text;
-    }
-    return { texts, text: first };
+    const t0 = Date.now();
+    const r = await Promise.race([engine.detect(url), timeout]);
+    // PaddleOCR her hücreyi ayrı kutu olarak verir; kutuları satırlara dizip etiket ile değeri yan yana getir
+    const words: Word[] = r.texts
+      .filter((l) => l.box && l.text.trim())
+      .map((l) => {
+        const xs = l.box!.map((p) => p[0]);
+        const ys = l.box!.map((p) => p[1]);
+        return { text: l.text, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      });
+    log(`okundu: ${words.length} kutu, ${Date.now() - t0} ms`);
+    const rows = rowsFromWords(words);
+    return { texts: [rows], text: rows };
   } finally {
-    onProgress = null;
+    URL.revokeObjectURL(url);
   }
 }
 
-/** Kuyruk boşalınca motoru kapat: iOS'ta bellek dolunca kamera açılmıyor / sayfa donuyor */
+/** Panel kapanınca motoru bırak (model ~50 MB bellek tutar) */
 export async function release(): Promise<void> {
-  const p = workerP;
-  workerP = null;
-  if (p) {
-    log('motor kapatılıyor');
-    await p.then((w) => w.terminate()).catch(() => undefined);
-  }
+  if (engineP) log('motor bırakıldı');
+  engineP = null;
 }

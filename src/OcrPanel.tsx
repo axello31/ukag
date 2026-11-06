@@ -11,11 +11,9 @@ interface Edit { on: boolean; value: string; unitIdx: number }
 
 const FIELD = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
 const STATUS: Record<string, string> = {
-  'loading tesseract core': 'OCR motoru yükleniyor',
-  'initializing tesseract': 'OCR motoru başlatılıyor',
-  'loading language traineddata': 'Dil verisi indiriliyor (yalnızca ilk sefer)',
-  'initializing api': 'Hazırlanıyor',
-  'recognizing text': 'Metin okunuyor',
+  model: 'OCR modeli indiriliyor (yalnızca ilk sefer, ~25 MB)',
+  hazırlanıyor: 'Hazırlanıyor',
+  okunuyor: 'Metin okunuyor',
 };
 let seq = 0;
 
@@ -63,9 +61,6 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   }, [photos]);
 
   const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
-  useEffect(() => {
-    if (!busy && photos.length) import('./ocrRun').then((m) => m.release());
-  }, [busy, photos.length]);
   useEffect(() => () => void import('./ocrRun').then((m) => m.release()), []);
 
   const [prevLog] = useState(readLog);
@@ -102,7 +97,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
             <ul className="ocr-tips">
               <li>Önce telefonun <b>Kamera</b> uygulamasıyla ekranı çekin (birden fazla ekransa her birini ayrı), sonra buradan <b>hepsini birlikte seçin</b>; değerler birleştirilir.</li>
               <li>Ekrana <b>dik</b>, parlamasız ve tablo kadrajı dolduracak şekilde çekin. Monitörde dalgalı desen görürseniz telefonu biraz uzaklaştırın veya hafif açı verin.</li>
-              <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR dil verisi (~5 MB) bir kez indirilir.</li>
+              <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR modeli (~25 MB) bir kez indirilir; Wi-Fi önerilir.</li>
             </ul>
           )}
 

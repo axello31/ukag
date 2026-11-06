@@ -22,15 +22,17 @@ interface Pat {
 
 // Sıra önemli: aynı konumda eşleşen iki etiketten öndeki kazanır.
 const NB = '(?:^|[^a-z0-9])'; // kelime başı (rakamlar dahil)
+// Hasta sıcaklığına göre düzeltilmiş değerler: pH(T), pCO2(T), parantezi düşmüş PO2T / PCO2T
+const TEMP = /\(t\)|(?:[o0]2|ph)a?t(?![a-z])/;
 const O2 = '(?:2|z(?![a-z]))'; // OCR "2"yi sık sık "z" okur (s0z, poz)
 const PATS: Pat[] = [
   { key: 'uNa', re: new RegExp(NB + '(?:na\\b|sodyum|sodium)'), urine: true },
   { key: 'uK', re: new RegExp(NB + '(?:k\\b|potasyum|potassium)'), urine: true },
   { key: 'uCl', re: new RegExp(NB + '(?:cl\\b|klor|chlor)'), urine: true },
 
-  { key: 'pCO2', re: new RegExp(NB + 'p\\s*[av]?\\s*c\\s*[o0]\\s*' + O2), skip: /\(t\)/ },
-  { key: 'pO2', re: new RegExp(NB + 'p\\s*[av]?\\s*[o0]\\s*' + O2), skip: /\(t\)|\(a|a\s*-\s*a|\/\s*f|p\s*50|ratio|oran/ },
-  { key: 'pH', re: new RegExp(NB + 'ph(?![a-z])'), skip: /\(t\)/ },
+  { key: 'pCO2', re: new RegExp(NB + 'p\\s*[av]?\\s*c\\s*[o0]\\s*' + O2), skip: TEMP },
+  { key: 'pO2', re: new RegExp(NB + 'p\\s*[av]?\\s*[o0]\\s*' + O2), skip: /\(t\)|[o0]2a?t(?![a-z])|\(a|a\s*-\s*a|\/\s*f|p\s*50|ratio|oran/ },
+  { key: 'pH', re: new RegExp(NB + 'ph(?![a-z])'), skip: TEMP },
   { key: 'HCO3', re: /(?:hc|c[il1]c|h[o0])[o0]\s*3|bikarbonat|bicarb/, low: /[,(\s]st\b|std|stand/ },
   { key: 'BE', re: new RegExp(NB + '(?:a?s?be(?![a-z])|c\\s*base|baz\\s*(?:fazla|a[cç])|base\\s*exc)'), low: /\(b\)|\bab?e\b/ },
   { key: 'COHb', re: /c\s*[o0]\s*hb|karboksi/ },
@@ -144,6 +146,7 @@ const REF = /\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?/g;
 const UNIT = /mm\s*hg|kpa|[mµμu]\s*mol|m\s*eq|mg\s*\/\s*d|g\s*\/\s*d|g\s*\/\s*l|%/;
 // Hasta başlığı satırları (Yaş 56 yıl, Boy/Kilo, Kurumu…) — "Boy/k" potasyum sanılıyordu
 const HEADER = /boy\s*\/\s*k|kilo|yas\s+\d|\d+\s*y[i1l]l\s*,|kurum|doktor|protokol|kimlik/;
+const SECTION_END = /tam\s*kan|hemogram/;
 const DATE = /\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,4}[.,/-](?:19|20)\d\d(?![0-9])|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g;
 
 /** Tek satırdan en fazla bir değer */
@@ -178,8 +181,10 @@ export function parseLine(line: string): Found | null {
   const key = best.p.key;
   const defUnit = key === 'bun' && /bun/.test(n.slice(best.at, best.end)) ? 1 : 0;
   // İlk makul sayı alınır; ilki çöpse sonraki ikisine bakılır (tahmin olarak işaretlenir)
-  const u = UNIT.exec(rest.replace(/\([^)]*\)/g, (x) => ' '.repeat(x.length))); // "Glukoz (mg/dL) 120" sayılmasın
-  const nums = [...rest.matchAll(NUM)].filter((m) => !u || (m.index || 0) < u.index).slice(0, 3);
+  // Parantez içi etiketin parçasıdır: "cHCO3(6)" → 6 değil; "Glukoz (mg/dL) 120" → birim sayılmaz
+  const bare = rest.replace(/\([^)]*\)/g, (x) => ' '.repeat(x.length));
+  const u = UNIT.exec(bare);
+  const nums = [...bare.matchAll(NUM)].filter((m) => !u || (m.index || 0) < u.index).slice(0, 3);
   for (let i = 0; i < nums.length; i++) {
     const m = nums[i];
     let raw = m[1];
@@ -201,6 +206,8 @@ export function parseTexts(texts: string[]): Found[] {
   for (const t of texts) {
     const seen = new Set<string>(); // aynı metinde aynı değer bir kez oy verir
     for (const line of t.split(/\r?\n/)) {
+      // Kümülatif sonuç tablosu (eski pH'lar vb.) başladı — gerisi bu örneğe ait değil
+      if (SECTION_END.test(normalize(line))) break;
       if (line.trim().length < 3) continue;
       const f = parseLine(line);
       if (!f) continue;
