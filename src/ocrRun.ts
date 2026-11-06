@@ -22,7 +22,7 @@ function getWorker(): Promise<Worker> {
 async function prepare(file: Blob): Promise<HTMLCanvasElement> {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
   const long = Math.max(bmp.width, bmp.height);
-  const scale = long > 2400 ? 2400 / long : long < 1400 ? 1400 / long : 1;
+  const scale = long > 2000 ? 2000 / long : long < 1200 ? 1200 / long : 1; // iPhone belleği için üst sınır
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * scale);
   c.height = Math.round(bmp.height * scale);
@@ -65,7 +65,10 @@ export async function recognize(file: Blob, progress: (p: number, status: string
   onProgress = progress;
   progress(0, 'hazırlanıyor');
   const [canvas, worker] = await Promise.all([prepare(file), getWorker()]);
-  const { data } = await worker.recognize(canvas, {}, { text: true, blocks: true });
+  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 120000));
+  const { data } = await Promise.race([worker.recognize(canvas, {}, { text: true, blocks: true }), timeout]).finally(() => {
+    canvas.width = canvas.height = 0; // görüntü belleğini hemen bırak
+  });
   const words: Word[] = [];
   for (const b of data.blocks || [])
     for (const p of b.paragraphs)
@@ -73,4 +76,11 @@ export async function recognize(file: Blob, progress: (p: number, status: string
         for (const w of l.words) words.push({ text: w.text, ...w.bbox });
   onProgress = null;
   return { rows: rowsFromWords(words), text: data.text };
+}
+
+/** Kuyruk boşalınca motoru kapat: iOS'ta bellek dolunca kamera açılmıyor / sayfa donuyor */
+export async function release(): Promise<void> {
+  const p = workerP;
+  workerP = null;
+  if (p) await p.then((w) => w.terminate()).catch(() => undefined);
 }

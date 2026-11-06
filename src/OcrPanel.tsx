@@ -38,8 +38,15 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
     const next = photos.find((p) => p.status === 'bekliyor');
     if (!next) return;
     patch(next.id, { status: 'okunuyor', msg: 'Hazırlanıyor' });
+    let last = { p: -1, s: '' };
+    const onProg = (p: number, s: string) => {
+      // her ilerleme olayında yeniden çizme — telefonda arayüzü kilitliyor
+      if (s === last.s && p - last.p < 0.1 && p < 1) return;
+      last = { p, s };
+      patch(next.id, { p, msg: STATUS[s] || 'Hazırlanıyor' });
+    };
     import('./ocrRun')
-      .then(({ recognize }) => recognize(next.file, (p, s) => patch(next.id, { p, msg: STATUS[s] || 'Hazırlanıyor' })))
+      .then(({ recognize }) => recognize(next.file, onProg))
       .then((out) => patch(next.id, { status: 'tamam', out, p: 1, msg: 'Okundu' }))
       .catch((e) => {
         console.error(e);
@@ -47,15 +54,21 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
       });
   }, [photos]);
 
+  const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
+  useEffect(() => {
+    if (!busy && photos.length) import('./ocrRun').then((m) => m.release());
+  }, [busy, photos.length]);
+  useEffect(() => () => void import('./ocrRun').then((m) => m.release()), []);
+
   useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const found = useMemo(() => parseTexts(photos.flatMap((p) => (p.out ? [p.out.rows, p.out.text] : []))), [photos]);
+  const doneKey = photos.filter((p) => p.out).map((p) => p.id).join(',');
+  const found = useMemo(() => parseTexts(photos.flatMap((p) => (p.out ? [p.out.rows, p.out.text] : []))), [doneKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const ed = (k: string): Edit => {
     const f = found.find((x) => x.key === k)!;
     return edits[k] || { on: true, value: String(f.value).replace('.', ','), unitIdx: f.unitIdx };
   };
   const setEd = (k: string, e: Partial<Edit>) => setEdits((s) => ({ ...s, [k]: { ...ed(k), ...e } }));
-  const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
   const chosen = found.filter((f) => ed(f.key as string).on && ed(f.key as string).value.trim());
   const done = photos.filter((p) => p.status === 'tamam');
 
@@ -95,7 +108,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
                     <span>{p.msg}</span>
                     {p.status === 'okunuyor' && <span className="ocr-bar"><i style={{ width: `${Math.round(p.p * 100)}%` }} /></span>}
                   </div>
-                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => { URL.revokeObjectURL(p.url); setPhotos((x) => x.filter((y) => y.id !== p.id)); }} disabled={p.status === 'okunuyor'}>×</button>
+                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => { URL.revokeObjectURL(p.url); setPhotos((x) => x.filter((y) => y.id !== p.id)); }} >×</button>
                 </div>
               ))}
             </div>
@@ -145,8 +158,8 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         </div>
         <div className="ocr-foot">
           <button className="ghost" onClick={onClose}>Vazgeç</button>
-          <button className="ocr-btn primary" disabled={busy || !chosen.length} onClick={apply}>
-            {busy ? 'Okunuyor…' : `Forma aktar${chosen.length ? ` (${chosen.length})` : ''}`}
+          <button className="ocr-btn primary" disabled={!chosen.length} onClick={apply}>
+            {busy && !chosen.length ? 'Okunuyor…' : `Forma aktar${chosen.length ? ` (${chosen.length})` : ''}`}
           </button>
         </div>
       </div>

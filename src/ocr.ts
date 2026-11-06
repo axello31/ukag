@@ -146,7 +146,8 @@ export function parseLine(line: string): Found | null {
     if (!best || at < best.at) best = { p, at, end: m.index + m[0].length };
   }
   if (!best) return null;
-  const rest = n.slice(best.end);
+  // Tarih / saat sütunları (kümülatif LIS ekranları) değer sanılmasın
+  const rest = n.slice(best.end).replace(/\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g, ' ');
   const m = NUM.exec(rest);
   if (!m) return null;
   const key = best.p.key;

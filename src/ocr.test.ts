@@ -121,3 +121,11 @@ describe('birim yazılıysa ondalık düzeltme birim değişikliğinden önce ge
     expect(parseLine('Glukoz 7,8')).toMatchObject({ key: 'glucose', value: 7.8, unitIdx: 1, fixed: true });
   });
 });
+
+describe('tarih ve saat değer sanılmaz', () => {
+  it('kümülatif LIS satırları', () => {
+    expect(parseLine('Hb 6.11.2026 14:10 6.11.20')).toBeNull();
+    expect(parseLine('Hemoglobin 6.11.2026 14:10 12,4 g/dL')).toMatchObject({ key: 'Hb', value: 12.4 });
+    expect(parseLine('pO2 06/11/26 14:10:22 78 mmHg')).toMatchObject({ key: 'pO2', value: 78 });
+  });
+});
