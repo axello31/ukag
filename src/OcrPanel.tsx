@@ -3,7 +3,6 @@ import type { Inputs } from './engine';
 import { ALL_FIELDS } from './fields';
 import { parseTexts } from './ocr';
 import { log, readLog, type OcrOut } from './ocrRun';
-import Camera, { canUseCamera } from './Camera';
 
 export interface Applied { key: keyof Inputs; value: string; unitIdx: number }
 
@@ -23,11 +22,7 @@ let seq = 0;
 export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; onApply: (a: Applied[]) => void; onClose: () => void }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
-  const camRef = useRef<HTMLInputElement>(null);
   const galRef = useRef<HTMLInputElement>(null);
-  const [cam, setCam] = useState(false);
-  const [camShots, setCamShots] = useState(0);
-  const [camErr, setCamErr] = useState<string | null>(null);
 
   const add = (fl: FileList | Blob[] | null) => {
     if (!fl) return;
@@ -40,7 +35,6 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
 
   // Fotoğrafları sırayla oku
   useEffect(() => {
-    if (cam) return; // kamera açıkken okuma bekler (telefon belleği)
     if (photos.some((p) => p.status === 'okunuyor')) return;
     const next = photos.find((p) => p.status === 'bekliyor');
     if (!next) return;
@@ -65,7 +59,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         log('hata: ' + e);
         patch(next.id, { status: 'hata', msg: navigator.onLine ? 'Okunamadı' : 'İlk kullanımda internet gerekli' });
       });
-  }, [photos, cam]);
+  }, [photos]);
 
   const busy = photos.some((p) => p.status === 'okunuyor' || p.status === 'bekliyor');
   useEffect(() => {
@@ -99,17 +93,14 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
           <button className="x" onClick={onClose} aria-label="Kapat">×</button>
         </div>
         <div className="modal-b">
-          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
           <input ref={galRef} type="file" accept="image/*" multiple hidden onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
           <div className="ocr-actions">
-            <button className="ocr-btn primary" onClick={() => { setCamErr(null); if (canUseCamera()) { setCamShots(0); setCam(true); } else camRef.current?.click(); }}>📷 {photos.length ? 'Bir foto daha çek' : 'Fotoğraf çek'}</button>
-            <button className="ocr-btn" onClick={() => galRef.current?.click()}>🖼 Galeriden seç</button>
+            <button className="ocr-btn primary" onClick={() => galRef.current?.click()}>🖼 {photos.length ? 'Fotoğraf ekle' : 'Fotoğrafları seç'}</button>
           </div>
-          {camErr && <p className="tiny warn-t">{camErr}</p>}
           {!photos.length && (
             <ul className="ocr-tips">
-              <li>Lab ekranını veya kan gazı cihazı çıktısını <b>dik açıyla, yakından ve parlamasız</b> çekin; değer tablosu kadraja tam sığsın.</li>
-              <li>Değerler birden fazla ekrandaysa her birini ayrı çekin; hepsi birleştirilir. Kamera açık kalır; peş peşe çekip <b>Bitti</b>’ye basın.</li>
+              <li>Önce telefonun <b>Kamera</b> uygulamasıyla ekranı çekin (birden fazla ekransa her birini ayrı), sonra buradan <b>hepsini birlikte seçin</b>; değerler birleştirilir.</li>
+              <li>Ekrana <b>dik</b>, parlamasız ve tablo kadrajı dolduracak şekilde çekin. Monitörde dalgalı desen görürseniz telefonu biraz uzaklaştırın veya hafif açı verin.</li>
               <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR dil verisi (~5 MB) bir kez indirilir.</li>
             </ul>
           )}
@@ -185,10 +176,6 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         </div>
       </div>
     </div>
-      {cam && (
-        <Camera count={camShots} onShot={(b) => { setCamShots((n) => n + 1); add([b]); }} onDone={() => setCam(false)}
-          onFail={(m) => { setCam(false); setCamErr(m); }} />
-      )}
     </>
   );
 }

@@ -8,7 +8,7 @@ Acil tıp hekimleri için arter / ven kan gazı yorumlama hesaplayıcısı ve ya
 - Her hesaplamada "Nasıl hesaplandı?" kutusu: formül, bu hastadaki değerler, kaynak.
 - Birim değiştiriciler (mmHg/kPa, g/dL/g/L, mg/dL/mmol/L, üre/BUN…).
 - `?vaka=1..6` ile sunumdaki vakalar doğrudan açılır.
-- **Fotoğraftan oku:** lab ekranı / cihaz çıktısının bir veya birkaç fotoğrafından değerler okunur (Tesseract.js, tamamen cihazda — görüntü sunucuya gitmez). Bulunan değerler forma aktarılmadan önce kontrol listesinde gösterilir; aktarılan alanlar sarı çerçeveyle işaretlenir. Ayıklama kuralları `src/ocr.ts` içinde.
+- **Fotoğraftan oku:** telefonun kamerasıyla çekilmiş bir veya birkaç lab ekranı / cihaz çıktısı fotoğrafından değerler okunur (Tesseract.js, tamamen cihazda — görüntü sunucuya gitmez). Bulunan değerler forma aktarılmadan önce kontrol listesinde gösterilir; aktarılan alanlar sarı çerçeveyle işaretlenir. Ayıklama kuralları `src/ocr.ts` içinde.
 
 İçerik: Dr. Gökhan Aksel, "Kan Gazı Yorumlama" sunumu; eksikler hakemli literatürden tamamlanmıştır (uygulamada Bilgi → Kanıt ve kaynaklar).
 
