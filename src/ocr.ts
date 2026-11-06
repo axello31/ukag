@@ -117,6 +117,11 @@ function resolve(key: keyof Inputs, raw: string, hint: number | undefined, defUn
   const order = [hint ?? defUnit, ...Array.from({ length: nU }, (_, i) => i).filter((i) => i !== (hint ?? defUnit))];
   // FiO2 0,21–1 → ondalık
   if (key === 'FiO2' && v > 0 && v <= 1) return { value: v, unitIdx: 1, fixed: false };
+  // "06" → 0,6: baştaki sıfırdan sonra virgül düşmüş
+  if (/^0\d+$/.test(raw)) {
+    const w = Number('0.' + raw.slice(1));
+    if (plausible(key, w, order[0])) return { value: w, unitIdx: order[0], fixed: true };
+  }
   if (plausible(key, v, order[0])) return { value: v, unitIdx: order[0], fixed: false };
   // Virgül/nokta kaybolmuş olabilir (7312 → 7,312): sağdan ondalık eklemeyi dene
   if (/^-?\d{2,5}$/.test(raw)) {
@@ -130,7 +135,9 @@ function resolve(key: keyof Inputs, raw: string, hint: number | undefined, defUn
   return null;
 }
 
-const NUM = /(?:^|[^0-9a-z.,])(-?\d+(?:[.,]\d+)?)(?![0-9])/;
+const NUM = /(?:^|[^0-9a-z.,])(-?\d+(?:[.,]\d+)?)(?![0-9])/g;
+// Tarih / saat (kümülatif LIS ekranları): 6.11.2026 · 06/11/26 · noktası düşmüş 611.2026 · 14:10(:22)
+const DATE = /\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,4}[.,/-](?:19|20)\d\d(?![0-9])|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g;
 
 /** Tek satırdan en fazla bir değer */
 export function parseLine(line: string): Found | null {
@@ -146,18 +153,20 @@ export function parseLine(line: string): Found | null {
     if (!best || at < best.at) best = { p, at, end: m.index + m[0].length };
   }
   if (!best) return null;
-  // Tarih / saat sütunları (kümülatif LIS ekranları) değer sanılmasın
-  const rest = n.slice(best.end).replace(/\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g, ' ');
-  const m = NUM.exec(rest);
-  if (!m) return null;
+  const rest = n.slice(best.end).replace(DATE, ' ');
   const key = best.p.key;
-  let raw = m[1];
-  if (raw.startsWith('-') && key !== 'BE' && key !== 'AGdirect') raw = raw.slice(1); // "HCO3-22" → tire etiketin parçası
-  const ctx = rest.slice(0, (m.index || 0) + m[0].length + 24); // birim değerden önce de yazılmış olabilir
   const defUnit = key === 'bun' && /bun/.test(n.slice(best.at, best.end)) ? 1 : 0;
-  const r = resolve(key, raw, unitFromText(key, ctx), defUnit);
-  if (!r) return null;
-  return { key, value: r.value, unitIdx: r.unitIdx, fixed: r.fixed, line: line.trim(), prio: best.p.low && best.p.low.test(n) ? 0 : 1 };
+  // İlk makul sayı alınır; ilki çöpse sonraki ikisine bakılır (tahmin olarak işaretlenir)
+  const nums = [...rest.matchAll(NUM)].slice(0, 3);
+  for (let i = 0; i < nums.length; i++) {
+    const m = nums[i];
+    let raw = m[1];
+    if (raw.startsWith('-') && key !== 'BE' && key !== 'AGdirect') raw = raw.slice(1); // "HCO3-22" → tire etiketin parçası
+    const ctx = rest.slice(0, (m.index || 0) + m[0].length + 24); // birim değerden önce de yazılmış olabilir
+    const r = resolve(key, raw, unitFromText(key, ctx), defUnit);
+    if (r) return { key, value: r.value, unitIdx: r.unitIdx, fixed: r.fixed || i > 0, line: line.trim(), prio: best.p.low && best.p.low.test(n) ? 0 : 1 };
+  }
+  return null;
 }
 
 /** Birden fazla metin (fotoğraf) → anahtar başına tek değer. Yüksek öncelik, sonra ilk bulunan kazanır. */

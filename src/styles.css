@@ -349,3 +349,4 @@ details.calc-box[open] summary { margin-bottom: 10px; }
   .ocr-src { grid-column: 1 / -1; }
   .toolbar .ocr-tb { order: -1; flex: 1 1 100%; }
 }
+.ocr-ph-ph { width: 52px; height: 52px; border-radius: 8px; background: var(--line); display: grid; place-items: center; font-size: 20px; }

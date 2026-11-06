@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Inputs } from './engine';
 import { ALL_FIELDS } from './fields';
 import { parseTexts } from './ocr';
-import type { OcrOut } from './ocrRun';
+import { log, readLog, type OcrOut } from './ocrRun';
 
 export interface Applied { key: keyof Inputs; value: string; unitIdx: number }
 
-interface Photo { id: number; url: string; file: File; status: 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
+interface Photo { id: number; file?: File; thumb?: string; status: 'bekliyor' | 'okunuyor' | 'tamam' | 'hata'; p: number; msg: string; out?: OcrOut }
 interface Edit { on: boolean; value: string; unitIdx: number }
 
 const FIELD = Object.fromEntries(ALL_FIELDS.map((f) => [f.key, f]));
@@ -27,7 +27,9 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
 
   const add = (fl: FileList | null) => {
     if (!fl) return;
-    const ps = Array.from(fl).filter((f) => f.type.startsWith('image/')).map((file) => ({ id: ++seq, url: URL.createObjectURL(file), file, status: 'bekliyor' as const, p: 0, msg: 'Sırada' }));
+    // Yalnızca dosya referansı tutulur; çözme/küçültme sırası gelince, tek tek yapılır
+    const ps = Array.from(fl).filter((f) => f.type.startsWith('image/') || !f.type).map((file) => ({ id: ++seq, file, status: 'bekliyor' as const, p: 0, msg: 'Sırada' }));
+    log(`${ps.length} foto eklendi`);
     setPhotos((x) => [...x, ...ps]);
   };
   const patch = (id: number, p: Partial<Photo>) => setPhotos((x) => x.map((ph) => (ph.id === id ? { ...ph, ...p } : ph)));
@@ -37,7 +39,8 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
     if (photos.some((p) => p.status === 'okunuyor')) return;
     const next = photos.find((p) => p.status === 'bekliyor');
     if (!next) return;
-    patch(next.id, { status: 'okunuyor', msg: 'Hazırlanıyor' });
+    const file = next.file!;
+    patch(next.id, { status: 'okunuyor', msg: 'Foto küçültülüyor', file: undefined });
     let last = { p: -1, s: '' };
     const onProg = (p: number, s: string) => {
       // her ilerleme olayında yeniden çizme — telefonda arayüzü kilitliyor
@@ -46,10 +49,15 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
       patch(next.id, { p, msg: STATUS[s] || 'Hazırlanıyor' });
     };
     import('./ocrRun')
-      .then(({ recognize }) => recognize(next.file, onProg))
+      .then(async ({ shrink, recognize }) => {
+        const { blob, thumb } = await shrink(file);
+        patch(next.id, { thumb, msg: 'Hazırlanıyor' });
+        return recognize(blob, onProg);
+      })
       .then((out) => patch(next.id, { status: 'tamam', out, p: 1, msg: 'Okundu' }))
       .catch((e) => {
         console.error(e);
+        log('hata: ' + e);
         patch(next.id, { status: 'hata', msg: navigator.onLine ? 'Okunamadı' : 'İlk kullanımda internet gerekli' });
       });
   }, [photos]);
@@ -60,7 +68,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   }, [busy, photos.length]);
   useEffect(() => () => void import('./ocrRun').then((m) => m.release()), []);
 
-  useEffect(() => () => photos.forEach((p) => URL.revokeObjectURL(p.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [prevLog] = useState(readLog);
 
   const doneKey = photos.filter((p) => p.out).map((p) => p.id).join(',');
   const found = useMemo(() => parseTexts(photos.flatMap((p) => (p.out ? [p.out.rows, p.out.text] : []))), [doneKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,8 +102,8 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
           {!photos.length && (
             <ul className="ocr-tips">
               <li>Lab ekranını veya kan gazı cihazı çıktısını <b>dik açıyla, yakından ve parlamasız</b> çekin; değer tablosu kadraja tam sığsın.</li>
-              <li>Değerler birden fazla ekrandaysa (gaz, elektrolit, biyokimya) her birini ayrı çekin; hepsi birleştirilir.</li>
-              <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR dil verisi (~10 MB) bir kez indirilir.</li>
+              <li>Değerler birden fazla ekrandaysa her birini ayrı çekin; hepsi birleştirilir. En sorunsuz yol: önce telefonun kamerasıyla hepsini çekip <b>Galeriden seç</b> ile birlikte seçmek.</li>
+              <li>Okuma <b>tamamen telefonunuzda</b> yapılır; fotoğraf hiçbir sunucuya gönderilmez. İlk kullanımda OCR dil verisi (~5 MB) bir kez indirilir.</li>
             </ul>
           )}
 
@@ -103,12 +111,12 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
             <div className="ocr-photos">
               {photos.map((p) => (
                 <div key={p.id} className={`ocr-ph st-${p.status}`}>
-                  <img src={p.url} alt="" />
+                  {p.thumb ? <img src={p.thumb} alt="" /> : <span className="ocr-ph-ph" aria-hidden>📷</span>}
                   <div className="ocr-ph-s">
                     <span>{p.msg}</span>
                     {p.status === 'okunuyor' && <span className="ocr-bar"><i style={{ width: `${Math.round(p.p * 100)}%` }} /></span>}
                   </div>
-                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => { URL.revokeObjectURL(p.url); setPhotos((x) => x.filter((y) => y.id !== p.id)); }} >×</button>
+                  <button className="x" aria-label="Fotoğrafı çıkar" onClick={() => { setPhotos((x) => x.filter((y) => y.id !== p.id)); }} >×</button>
                 </div>
               ))}
             </div>
@@ -154,6 +162,12 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
                 {done.map((p, i) => <pre key={p.id}>{done.length > 1 ? `— Foto ${i + 1} —\n` : ''}{p.out!.text.trim() || '(boş)'}</pre>)}
               </details>
             </>
+          )}
+          {prevLog.length > 0 && (
+            <details className="ocr-raw">
+              <summary>Tanı günlüğü</summary>
+              <pre>{prevLog.join('\n')}</pre>
+            </details>
           )}
         </div>
         <div className="ocr-foot">

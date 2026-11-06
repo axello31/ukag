@@ -129,3 +129,14 @@ describe('tarih ve saat değer sanılmaz', () => {
     expect(parseLine('pO2 06/11/26 14:10:22 78 mmHg')).toMatchObject({ key: 'pO2', value: 78 });
   });
 });
+
+describe('bozuk tarih ve düşmüş virgül', () => {
+  it('noktası düşmüş tarih, 06 → 0,6', () => {
+    expect(parseLine('Laktat 611.2026 14:10 2,1 mmolL')).toMatchObject({ key: 'lactate', value: 2.1 });
+    expect(parseLine('MetHb 611.2026 14:10 06 mmolL')).toMatchObject({ key: 'MetHb', value: 0.6, fixed: true });
+    expect(parseLine('Ca++ 611.2026 14:10 1,14 mmoliL')).toMatchObject({ key: 'iCa', value: 1.14 });
+  });
+  it('ilk sayı çöpse sonrakine bakar', () => {
+    expect(parseLine('Na 0 138 mmol/L')).toMatchObject({ key: 'Na', value: 138, fixed: true });
+  });
+});
