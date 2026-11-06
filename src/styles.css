@@ -316,7 +316,7 @@ details.calc-box[open] summary { margin-bottom: 10px; }
 .ocr-tb:hover { border-color: var(--muted); }
 .ocr-info { background: var(--warn-soft); color: var(--warn); }
 .field.ocr .field-in { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn-soft); }
-.modal.ocr { width: min(680px, 100%); }
+.modal.ocr { width: min(680px, 100%); position: relative; }
 .ocr-actions { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .ocr-btn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; font-weight: 650; }
 .ocr-btn.primary { background: #c8102e; border-color: #c8102e; color: #fff; }
@@ -358,3 +358,12 @@ details.calc-box[open] summary { margin-bottom: 10px; }
   .ocr-bg .modal-b { flex: 1; min-height: 0; }
   .ocr-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
+
+.sign { border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--ink-2); font-weight: 700; font-size: 16px; padding: 0 10px; flex: none; }
+.sign:active { background: var(--line); }
+
+.ocr-confirm { position: absolute; inset: 0; z-index: 5; background: rgba(5, 10, 25, .5); border-radius: 18px; display: grid; place-items: center; padding: 16px; }
+.ocr-confirm-box { background: var(--surface); border-radius: 16px; padding: 18px; max-width: 420px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
+.ocr-confirm-box h3 { margin: 0 0 8px; color: var(--warn); font-size: 17px; }
+.ocr-confirm-box p { margin: 0 0 8px; font-size: 14.5px; }
+.ocr-confirm-b { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }

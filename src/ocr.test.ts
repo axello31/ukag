@@ -161,3 +161,27 @@ describe('gerçek LIS ekranı fotoğraflarındaki OCR hataları', () => {
     expect(r[0].value).toBe(7.34);
   });
 });
+
+describe('iPhone fotoğraflarındaki hatalar (15:05)', () => {
+  it('hasta başlığı satırı değer vermez', () => {
+    expect(parseLine('| a Craveeis 56 il, 1 ay, gin, Boy/k D0 1 Em, i')).toBeNull();
+  });
+  it('birimden sonraki sayı referanstır', () => {
+    expect(parseLine('I tHb g/dL 12 d75')).toBeNull();
+    expect(parseLine('[E] s02 % 95599')).toBeNull();
+    expect(parseLine('sO2 38 % 95 - 99')).toMatchObject({ key: 'sO2', value: 38 });
+    expect(parseLine('Glukoz (mg/dL) 120')).toMatchObject({ key: 'glucose', value: 120 });
+  });
+  it('pH tam sayı olamaz, satır ortasındaki kısa etiket çöptür', () => {
+    expect(parseLine('pH / 7 1850017. /50')).toBeNull();
+    expect(parseLine('Gel li Hi fet EER LH CL ea HERG Hs snd ol BE mpi 12')).toBeNull();
+  });
+  it('aynı değer doğrudan da okunduysa "düzeltildi" sayılmaz', () => {
+    const r = parseTexts(['Arteriyel kanda sodyum 1167 mmol/L', 'Arteriyel kanda sodyum 116.7 mmol/L']);
+    expect(r[0]).toMatchObject({ value: 116.7, fixed: false });
+  });
+});
+
+it('uzun Türkçe etiket satır ortasında da tanınır', () => {
+  expect(parseLine('YA | | Arteriyel kanda glukoz 70 mg/dL 70 - 105')).toMatchObject({ key: 'glucose', value: 70 });
+});

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyze, DEFAULT_SETTINGS, type BP, type Chronicity, type DisorderKey, type How, type Inputs, type Line, type Sample, type Settings } from './engine';
-import { GROUPS, ALL_FIELDS, fieldKeysFor, type Field } from './fields';
+import { GROUPS, ALL_FIELDS, fieldKeysFor, flipSign, type Field } from './fields';
 import { CAUSES, contextHints } from './causes';
 import { CASES } from './cases';
 import { INFO } from './info';
@@ -330,6 +330,7 @@ function FieldInput({ f, isVen, ocr, value, unitIdx, onChange, onUnit }: { f: Fi
     <div className={`field ${bad ? 'bad' : ''} ${value ? 'filled' : ''} ${ocr ? 'ocr' : ''}`} title={ocr ? 'Fotoğraftan okundu — kontrol edin' : undefined}>
       <label htmlFor={id}>{label}</label>
       <div className="field-in">
+        {f.neg && <button type="button" className="sign" onClick={() => onChange(flipSign(value))} aria-label={`${label} işaretini değiştir`}>±</button>}
         <input id={id} inputMode="decimal" autoComplete="off" value={value} placeholder={f.hint} onChange={(e) => onChange(e.target.value)} />
         {multi ? (
           <select className="unit" value={unitIdx} onChange={(e) => onUnit(Number(e.target.value))} aria-label={`${label} birimi`}>

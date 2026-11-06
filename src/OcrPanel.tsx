@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Inputs } from './engine';
-import { ALL_FIELDS } from './fields';
+import { ALL_FIELDS, flipSign } from './fields';
 import { parseTexts } from './ocr';
 import { log, readLog, type OcrOut } from './ocrRun';
 
@@ -23,6 +23,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const galRef = useRef<HTMLInputElement>(null);
+  const [confirm, setConfirm] = useState(false);
 
   const add = (fl: FileList | Blob[] | null) => {
     if (!fl) return;
@@ -136,6 +137,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
                         <div key={k} className={`ocr-row ${e.on ? '' : 'off'}`}>
                           <label className="ocr-chk"><input type="checkbox" checked={e.on} onChange={(x) => setEd(k, { on: x.target.checked })} /> <b>{label}</b></label>
                           <div className="field-in">
+                            {fd.neg && <button type="button" className="sign" onClick={() => setEd(k, { value: flipSign(e.value) })} aria-label={`${label} işaretini değiştir`}>±</button>}
                             <input inputMode="decimal" value={e.value} onChange={(x) => setEd(k, { value: x.target.value })} aria-label={label} />
                             {fd.units.length > 1 ? (
                               <select className="unit" value={e.unitIdx} onChange={(x) => setEd(k, { unitIdx: Number(x.target.value) })} aria-label={`${label} birimi`}>
@@ -144,7 +146,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
                             ) : fd.units[0].u ? <span className="unit static">{fd.units[0].u}</span> : null}
                           </div>
                           <div className="ocr-src">
-                            {f.fixed && <span className="ocr-guess" title="Ondalık nokta veya birim tahmin edildi">tahmin</span>}
+                            {f.fixed && <span className="ocr-guess" title="Okunan sayıda virgül/birim yoktu; makul aralığa göre düzeltildi (ör. 1167 → 116,7). Fotoğrafla karşılaştırın.">düzeltildi</span>}
                             <code>{f.line}</code>
                           </div>
                         </div>
@@ -170,10 +172,23 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
         </div>
         <div className="ocr-foot">
           <button className="ghost" onClick={onClose}>Vazgeç</button>
-          <button className="ocr-btn primary" disabled={!chosen.length} onClick={apply}>
+          <button className="ocr-btn primary" disabled={!chosen.length} onClick={() => setConfirm(true)}>
             {busy && !chosen.length ? 'Okunuyor…' : `Forma aktar${chosen.length ? ` (${chosen.length})` : ''}`}
           </button>
         </div>
+        {confirm && (
+          <div className="ocr-confirm" role="alertdialog" aria-modal="true" aria-labelledby="ocr-c-h">
+            <div className="ocr-confirm-box">
+              <h3 id="ocr-c-h">⚠ Değerleri kontrol edin</h3>
+              <p>Fotoğraftan okunan değerler <b>hatalı olabilir</b>. Forma aktardıktan sonra her değeri lab ekranıyla karşılaştırın; hatalı aktarılmış veya eksik değerleri <b>elle düzeltin</b>.</p>
+              <p className="tiny muted">Aktarılan alanlar formda sarı çerçeveyle işaretlenir.</p>
+              <div className="ocr-confirm-b">
+                <button className="ghost" onClick={() => setConfirm(false)}>Geri dön</button>
+                <button className="ocr-btn primary" onClick={apply}>Anladım, aktar ({chosen.length})</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </>

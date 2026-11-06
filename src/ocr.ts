@@ -113,6 +113,7 @@ function plausible(key: keyof Inputs, v: number, unitIdx: number): boolean {
 function resolve(key: keyof Inputs, raw: string, hint: number | undefined, defUnit: number): { value: number; unitIdx: number; fixed: boolean } | null {
   const v = Number(raw.replace(',', '.'));
   if (!Number.isFinite(v)) return null;
+  if (key === 'pH' && /^\d$/.test(raw)) return null; // pH tam sayı olamaz (çöp satır)
   const f = FIELD[key as string];
   const nU = f ? f.units.length : 1;
   const order = [hint ?? defUnit, ...Array.from({ length: nU }, (_, i) => i).filter((i) => i !== (hint ?? defUnit))];
@@ -139,11 +140,16 @@ function resolve(key: keyof Inputs, raw: string, hint: number | undefined, defUn
 const NUM = /(?:^|[^0-9a-z.,])(-?\d+(?:[.,]\d+)?)(?![0-9])/g;
 // Tarih / saat (kümülatif LIS ekranları): 6.11.2026 · 06/11/26 · noktası düşmüş 611.2026 · 14:10(:22)
 const REF = /\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?/g;
+// Değer sütunu birimden önce gelir; birimden sonraki sayılar referans aralığıdır (değer okunamamışsa bile)
+const UNIT = /mm\s*hg|kpa|[mµμu]\s*mol|m\s*eq|mg\s*\/\s*d|g\s*\/\s*d|g\s*\/\s*l|%/;
+// Hasta başlığı satırları (Yaş 56 yıl, Boy/Kilo, Kurumu…) — "Boy/k" potasyum sanılıyordu
+const HEADER = /boy\s*\/\s*k|kilo|yas\s+\d|\d+\s*y[i1l]l\s*,|kurum|doktor|protokol|kimlik/;
 const DATE = /\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,4}[.,/-](?:19|20)\d\d(?![0-9])|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g;
 
 /** Tek satırdan en fazla bir değer */
 export function parseLine(line: string): Found | null {
   const n = normalize(line);
+  if (HEADER.test(n)) return null;
   const isUrine = /idrar|urine|\bu\s*-\s*(?:na|k|cl)|spot/.test(n);
   const hits: { p: Pat; at: number; end: number }[] = [];
   for (const p of PATS) {
@@ -152,6 +158,8 @@ export function parseLine(line: string): Found | null {
     const m = p.re.exec(n);
     if (!m) continue;
     const at = m.index + (/^[^a-z0-9]/.test(m[0]) ? 1 : 0); // önündeki ayırıcıyı sayma
+    // Kısa etiket (BE, K, pH…) tabloda satır başındadır; satırın ortasındaysa OCR çöpüdür
+    if (at > 10 && (/^[a-z0-9+()-]+/.exec(n.slice(at)) || [''])[0].length <= 3) continue; // kelimenin tamamı (glu → glukoz)
     hits.push({ p, at, end: m.index + m[0].length });
   }
   if (!hits.length) return null;
@@ -170,7 +178,8 @@ export function parseLine(line: string): Found | null {
   const key = best.p.key;
   const defUnit = key === 'bun' && /bun/.test(n.slice(best.at, best.end)) ? 1 : 0;
   // İlk makul sayı alınır; ilki çöpse sonraki ikisine bakılır (tahmin olarak işaretlenir)
-  const nums = [...rest.matchAll(NUM)].slice(0, 3);
+  const u = UNIT.exec(rest.replace(/\([^)]*\)/g, (x) => ' '.repeat(x.length))); // "Glukoz (mg/dL) 120" sayılmasın
+  const nums = [...rest.matchAll(NUM)].filter((m) => !u || (m.index || 0) < u.index).slice(0, 3);
   for (let i = 0; i < nums.length; i++) {
     const m = nums[i];
     let raw = m[1];
@@ -202,13 +211,15 @@ export function parseTexts(texts: string[]): Found[] {
       if (!votes.has(k)) votes.set(k, new Map());
       const m = votes.get(k)!;
       const v = m.get(vk);
-      if (v) v.n++;
-      else m.set(vk, { f, n: 1, first: seq++ });
+      if (v) {
+        v.n++;
+        if (v.f.fixed && !f.fixed) v.f = f; // aynı değer bir yerde doğrudan okunduysa düzeltme sayılmaz
+      } else m.set(vk, { f, n: 1, first: seq++ });
     }
   }
   const out: Found[] = [];
   for (const m of votes.values()) {
-    const best = [...m.values()].sort((a, b) => b.f.prio - a.f.prio || b.n - a.n || a.first - b.first)[0];
+    const best = [...m.values()].sort((a, b) => b.f.prio - a.f.prio || b.n - a.n || +!!a.f.fixed - +!!b.f.fixed || a.first - b.first)[0];
     out.push(best.f);
   }
   const order = ALL_FIELDS.map((f) => f.key);

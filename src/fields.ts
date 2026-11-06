@@ -12,6 +12,7 @@ export interface Field {
   units: Unit[];
   step?: string;
   venLabel?: string;
+  neg?: boolean; // eksi olabilir — iPhone sayı klavyesinde '−' tuşu yok, ± düğmesi gösterilir
 }
 
 const id = (x: number) => x;
@@ -34,7 +35,7 @@ export const GROUPS: Group[] = [
       { key: 'pH', label: 'pH', hint: '7,35–7,45', units: [{ u: '', toInt: id }], step: '0.01' },
       { key: 'pCO2', label: 'pCO₂', venLabel: 'pvCO₂', hint: '35–45', units: MMHG },
       { key: 'HCO3', label: 'HCO₃⁻', hint: '22–26', units: [{ u: 'mmol/L', toInt: id }] },
-      { key: 'BE', label: 'Baz fazlalığı (BE)', hint: '−2 / +2', units: [{ u: 'mmol/L', toInt: id }] },
+      { key: 'BE', label: 'Baz fazlalığı (BE)', hint: '−2 / +2', units: [{ u: 'mmol/L', toInt: id }], neg: true },
     ],
   },
   {
@@ -102,6 +103,9 @@ export const GROUPS: Group[] = [
 ];
 
 export const ALL_FIELDS = GROUPS.flatMap((g) => g.fields);
+
+/** "12,9" ↔ "-12,9" */
+export const flipSign = (v: string) => (v.trim().startsWith('-') ? v.trim().slice(1) : '-' + v.trim());
 
 /** Çıktıdaki ad → giriş alanı anahtarları (eksik veri listesinden alana atlamak için) */
 export function fieldKeysFor(missingFields: string): (keyof Inputs)[] {
