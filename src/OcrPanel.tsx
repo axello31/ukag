@@ -76,7 +76,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
   const [prevLog] = useState(readLog);
 
   const doneKey = photos.filter((p) => p.out).map((p) => p.id).join(',');
-  const found = useMemo(() => parseTexts(photos.flatMap((p) => (p.out ? [p.out.rows, p.out.text] : []))), [doneKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const found = useMemo(() => parseTexts(photos.flatMap((p) => p.out?.texts ?? [])), [doneKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const ed = (k: string): Edit => {
     const f = found.find((x) => x.key === k)!;
     return edits[k] || { on: true, value: String(f.value).replace('.', ','), unitIdx: f.unitIdx };
@@ -92,7 +92,7 @@ export default function OcrPanel({ isVen, onApply, onClose }: { isVen: boolean; 
 
   return (
     <>
-    <div className="modal-bg" onClick={onClose}>
+    <div className="modal-bg ocr-bg" onClick={onClose}>
       <div className="modal ocr" role="dialog" aria-modal="true" aria-label="Fotoğraftan oku" onClick={(e) => e.stopPropagation()}>
         <div className="modal-h">
           <h2>Fotoğraftan oku</h2>

@@ -103,24 +103,34 @@ export async function shrink(file: Blob): Promise<{ blob: Blob; thumb: string }>
 }
 
 export interface OcrOut {
-  rows: string; // kelimelerden yeniden dizilmiş satırlar (sütunlu ekranlar için)
-  text: string; // Tesseract'ın kendi satırları
+  texts: string[]; // her geçiş için: kelimelerden dizilmiş satırlar (sütunlu ekranlar) + Tesseract'ın kendi satırları
+  text: string; // gösterim için ilk geçişin metni
 }
 
+// Ekran fotoğraflarında modlar farklı satırları yakalıyor; iki geçişin sonuçları oylanır (ocr.ts parseTexts)
+const PASSES = ['6', '11']; // tek blok · seyrek metin
+
 export async function recognize(blob: Blob, progress: (p: number, status: string) => void): Promise<OcrOut> {
-  onProgress = progress;
   const worker = await getWorker();
-  log('okunuyor');
-  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 120000));
+  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), 180000));
+  const texts: string[] = [];
+  let first = '';
   try {
-    const { data } = await Promise.race([worker.recognize(blob, {}, { text: true, blocks: true }), timeout]);
-    const words: Word[] = [];
-    for (const b of data.blocks || [])
-      for (const p of b.paragraphs)
-        for (const l of p.lines)
-          for (const w of l.words) words.push({ text: w.text, ...w.bbox });
-    log(`okundu, ${words.length} kelime`);
-    return { rows: rowsFromWords(words), text: data.text };
+    for (let i = 0; i < PASSES.length; i++) {
+      onProgress = (p, s) => progress((i + p) / PASSES.length, s);
+      await worker.setParameters({ tessedit_pageseg_mode: PASSES[i] as never });
+      log(`okunuyor (geçiş ${i + 1})`);
+      const { data } = await Promise.race([worker.recognize(blob, {}, { text: true, blocks: true }), timeout]);
+      const words: Word[] = [];
+      for (const b of data.blocks || [])
+        for (const p of b.paragraphs)
+          for (const l of p.lines)
+            for (const w of l.words) words.push({ text: w.text, ...w.bbox });
+      log(`geçiş ${i + 1}: ${words.length} kelime`);
+      texts.push(rowsFromWords(words), data.text);
+      if (!i) first = data.text;
+    }
+    return { texts, text: first };
   } finally {
     onProgress = null;
   }

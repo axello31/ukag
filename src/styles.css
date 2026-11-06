@@ -361,3 +361,11 @@ details.calc-box[open] summary { margin-bottom: 10px; }
 .cam-shutter:active { transform: scale(.93); }
 .cam-shutter:disabled { opacity: .4; }
 .cam-done { justify-self: end; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font-weight: 700; padding: 10px 18px; border-radius: 99px; }
+/* iPhone: 100vh adres çubuğunu saymaz, alt butonlar ekran dışında kalıyordu */
+.modal { max-height: calc(100dvh - 32px); }
+@media (max-width: 560px) {
+  .ocr-bg { padding: max(10px, env(safe-area-inset-top)) 8px max(10px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+  .ocr-bg .modal { max-height: none; flex: 1; min-height: 0; }
+  .ocr-bg .modal-b { flex: 1; min-height: 0; }
+  .ocr-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}

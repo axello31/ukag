@@ -140,3 +140,24 @@ describe('bozuk tarih ve düşmüş virgül', () => {
     expect(parseLine('Na 0 138 mmol/L')).toMatchObject({ key: 'Na', value: 138, fixed: true });
   });
 });
+
+describe('gerçek LIS ekranı fotoğraflarındaki OCR hataları', () => {
+  it('referans aralığı değer sanılmaz', () => {
+    expect(parseLine('Arteriyel kanda potasyum mmol/L 3.4-5.5')).toBeNull();
+    expect(parseLine('Arteriyel kanda methemoglobin ell | | % 0-15')).toBeNull();
+    expect(parseLine('Arteriyel kanda potasyum 4.23 mmol/L 3.4 - 5.5')).toMatchObject({ value: 4.23 });
+  });
+  it('bozuk etiketler', () => {
+    expect(parseLine('CE cic03(0 11.8 Flt')).toMatchObject({ key: 'HCO3', value: 11.8 });
+    expect(parseLine('0 [soz 38 | % 95-99')).toMatchObject({ key: 'sO2', value: 38 });
+    expect(parseLine('Arteriyel kanda ryonize kalsiy 0.89 mmol/L 1.12-1.32')).toMatchObject({ key: 'iCa', value: 0.89 });
+  });
+  it('onay kutusu "BE" okunursa sonraki etiket alınır', () => {
+    expect(parseLine('BE  pco2m 24.0 el | mmHg')).toMatchObject({ key: 'pCO2', value: 24 });
+    expect(parseLine('Anion Gap,K+c 18.0 mmol/L')).toMatchObject({ key: 'AGdirect' });
+  });
+  it('oylama: çoğunluk kazanır', () => {
+    const r = parseTexts(['pH 7.48', 'pH 7.34', 'pH 7.34']);
+    expect(r[0].value).toBe(7.34);
+  });
+});

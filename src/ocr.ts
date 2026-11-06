@@ -22,19 +22,20 @@ interface Pat {
 
 // Sıra önemli: aynı konumda eşleşen iki etiketten öndeki kazanır.
 const NB = '(?:^|[^a-z0-9])'; // kelime başı (rakamlar dahil)
+const O2 = '(?:2|z(?![a-z]))'; // OCR "2"yi sık sık "z" okur (s0z, poz)
 const PATS: Pat[] = [
   { key: 'uNa', re: new RegExp(NB + '(?:na\\b|sodyum|sodium)'), urine: true },
   { key: 'uK', re: new RegExp(NB + '(?:k\\b|potasyum|potassium)'), urine: true },
   { key: 'uCl', re: new RegExp(NB + '(?:cl\\b|klor|chlor)'), urine: true },
 
-  { key: 'pCO2', re: new RegExp(NB + 'p\\s*[av]?\\s*c\\s*[o0]\\s*2'), skip: /\(t\)/ },
-  { key: 'pO2', re: new RegExp(NB + 'p\\s*[av]?\\s*[o0]\\s*2'), skip: /\(t\)|\(a|a\s*-\s*a|\/\s*f|p\s*50|ratio|oran/ },
+  { key: 'pCO2', re: new RegExp(NB + 'p\\s*[av]?\\s*c\\s*[o0]\\s*' + O2), skip: /\(t\)/ },
+  { key: 'pO2', re: new RegExp(NB + 'p\\s*[av]?\\s*[o0]\\s*' + O2), skip: /\(t\)|\(a|a\s*-\s*a|\/\s*f|p\s*50|ratio|oran/ },
   { key: 'pH', re: new RegExp(NB + 'ph(?![a-z])'), skip: /\(t\)/ },
-  { key: 'HCO3', re: /hc[o0]\s*3|bikarbonat|bicarb/, low: /[,(\s]st\b|std|stand/ },
+  { key: 'HCO3', re: /(?:hc|c[il1]c|h[o0])[o0]\s*3|bikarbonat|bicarb/, low: /[,(\s]st\b|std|stand/ },
   { key: 'BE', re: new RegExp(NB + '(?:a?s?be(?![a-z])|c\\s*base|baz\\s*(?:fazla|a[cç])|base\\s*exc)'), low: /\(b\)|\bab?e\b/ },
   { key: 'COHb', re: /c\s*[o0]\s*hb|karboksi/ },
   { key: 'MetHb', re: /met\s*hb|methem/ },
-  { key: 'sO2', re: new RegExp(NB + '(?:c?s\\s*[o0]\\s*2|[o0]2\\s*sat|satur)'), skip: /sp\s*[o0]2/ },
+  { key: 'sO2', re: new RegExp(NB + '(?:c?s\\s*[o0]\\s*' + O2 + '|[o0]2\\s*sat|satur)'), skip: /sp\s*[o0]2/ },
   { key: 'SpO2', re: /sp\s*[o0]\s*2/ },
   { key: 'FiO2', re: new RegExp(NB + '(?:f\\s*[i1l]\\s*[o0]\\s*2|f\\s*[o0]\\s*2\\s*\\(i\\))'), skip: /ratio|oran|\/|p\s*[o0]\s*2/ },
   { key: 'patm', re: new RegExp(NB + '(?:baro|atm(?![a-z])|atmosfer)') },
@@ -42,7 +43,7 @@ const PATS: Pat[] = [
   { key: 'Na', re: new RegExp(NB + '(?:c?na\\s*\\+?(?![a-z])|sodyum|sodium)') },
   { key: 'K', re: new RegExp(NB + '(?:c?k\\s*\\+|k(?![a-z/])|potasyum|potassium)') },
   { key: 'Cl', re: new RegExp(NB + '(?:c?cl\\s*-?(?![a-z])|klor|chlor)') },
-  { key: 'iCa', re: new RegExp(NB + '(?:c?ca\\s*(?:2\\s*\\+|\\+\\s*\\+|2(?![0-9]))|i\\s*ca(?![a-z])|iyonize|ionized)'), skip: /\(7[.,]4\)/ },
+  { key: 'iCa', re: new RegExp(NB + '(?:c?ca\\s*(?:2\\s*\\+|\\+\\s*\\+|2(?![0-9]))|i\\s*ca(?![a-z])|ionized)|yoni[sz]e'), skip: /\(7[.,]4\)/ }, // ryonize = iyonize
   { key: 'lactate', re: new RegExp(NB + '(?:c?lac|lakt|lact)') },
   { key: 'glucose', re: new RegExp(NB + '(?:c?glu|gluk|glik)') },
   { key: 'ketone', re: /keton|ketone|b\s*-?\s*hb\b|bhb|hidroksib|hydroxyb/ },
@@ -137,23 +138,35 @@ function resolve(key: keyof Inputs, raw: string, hint: number | undefined, defUn
 
 const NUM = /(?:^|[^0-9a-z.,])(-?\d+(?:[.,]\d+)?)(?![0-9])/g;
 // Tarih / saat (kümülatif LIS ekranları): 6.11.2026 · 06/11/26 · noktası düşmüş 611.2026 · 14:10(:22)
+const REF = /\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?/g;
 const DATE = /\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4}|\d{1,4}[.,/-](?:19|20)\d\d(?![0-9])|\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?/g;
 
 /** Tek satırdan en fazla bir değer */
 export function parseLine(line: string): Found | null {
   const n = normalize(line);
   const isUrine = /idrar|urine|\bu\s*-\s*(?:na|k|cl)|spot/.test(n);
-  let best: { p: Pat; at: number; end: number } | null = null;
+  const hits: { p: Pat; at: number; end: number }[] = [];
   for (const p of PATS) {
     if (!!p.urine !== isUrine) continue;
     if (p.skip && p.skip.test(n)) continue;
     const m = p.re.exec(n);
     if (!m) continue;
     const at = m.index + (/^[^a-z0-9]/.test(m[0]) ? 1 : 0); // önündeki ayırıcıyı sayma
-    if (!best || at < best.at) best = { p, at, end: m.index + m[0].length };
+    hits.push({ p, at, end: m.index + m[0].length });
   }
-  if (!best) return null;
-  const rest = n.slice(best.end).replace(DATE, ' ');
+  if (!hits.length) return null;
+  hits.sort((a, b) => a.at - b.at); // kararlı sıralama: aynı konumda listede öndeki kalır
+  // Kısa etiket (BE, K, Hb…) ile sayı arasında başka etiket varsa kısa olan muhtemelen çöp
+  // (onay kutusu "BE" / "El" okunur): sayıya en yakın etiketi al
+  let bi = 0;
+  while (bi + 1 < hits.length && hits[bi].end - hits[bi].at <= 3) {
+    const d = n.slice(hits[bi].end).search(/\d/);
+    if (d < 0 || hits[bi + 1].at >= hits[bi].end + d) break;
+    bi++;
+  }
+  const best = hits[bi];
+  // Tarih/saat ve referans aralıkları ("3.4 - 5.5") değer sanılmasın
+  const rest = n.slice(best.end).replace(DATE, ' ').replace(REF, ' ');
   const key = best.p.key;
   const defUnit = key === 'bun' && /bun/.test(n.slice(best.at, best.end)) ? 1 : 0;
   // İlk makul sayı alınır; ilki çöpse sonraki ikisine bakılır (tahmin olarak işaretlenir)
@@ -169,20 +182,37 @@ export function parseLine(line: string): Found | null {
   return null;
 }
 
-/** Birden fazla metin (fotoğraf) → anahtar başına tek değer. Yüksek öncelik, sonra ilk bulunan kazanır. */
+/**
+ * Birden fazla metin (fotoğraf × okuma geçişi) → anahtar başına tek değer.
+ * Oylama: önce öncelik (ör. gerçek HCO₃⁻ > standart), sonra kaç metinde aynı değerin okunduğu, sonra ilk bulunan.
+ */
 export function parseTexts(texts: string[]): Found[] {
-  const out = new Map<string, Found>();
+  const votes = new Map<string, Map<string, { f: Found; n: number; first: number }>>();
+  let seq = 0;
   for (const t of texts) {
+    const seen = new Set<string>(); // aynı metinde aynı değer bir kez oy verir
     for (const line of t.split(/\r?\n/)) {
       if (line.trim().length < 3) continue;
       const f = parseLine(line);
       if (!f) continue;
-      const prev = out.get(f.key as string);
-      if (!prev || f.prio > prev.prio) out.set(f.key as string, f);
+      const k = f.key as string;
+      const vk = `${f.prio}|${f.value}|${f.unitIdx}`;
+      if (seen.has(k + vk)) continue;
+      seen.add(k + vk);
+      if (!votes.has(k)) votes.set(k, new Map());
+      const m = votes.get(k)!;
+      const v = m.get(vk);
+      if (v) v.n++;
+      else m.set(vk, { f, n: 1, first: seq++ });
     }
   }
+  const out: Found[] = [];
+  for (const m of votes.values()) {
+    const best = [...m.values()].sort((a, b) => b.f.prio - a.f.prio || b.n - a.n || a.first - b.first)[0];
+    out.push(best.f);
+  }
   const order = ALL_FIELDS.map((f) => f.key);
-  return [...out.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  return out.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 }
 
 export interface Word { text: string; x0: number; y0: number; x1: number; y1: number }
