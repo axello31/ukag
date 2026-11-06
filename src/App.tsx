@@ -4,6 +4,7 @@ import { GROUPS, ALL_FIELDS, fieldKeysFor, type Field } from './fields';
 import { CAUSES, contextHints } from './causes';
 import { CASES } from './cases';
 import { INFO } from './info';
+import OcrPanel, { type Applied } from './OcrPanel';
 
 type Modal = { t: 'causes'; key: DisorderKey } | { t: 'info'; tab: string } | { t: 'settings' } | null;
 
@@ -66,6 +67,8 @@ export default function App() {
   const [open, setOpen] = useState<Record<string, boolean>>({ temel: true, oksijen: true, elektrolit: true, ...prefs.open });
   const [modal, setModal] = useState<Modal>(null);
   const [caseInfo, setCaseInfo] = useState<string | null>(null);
+  const [showOcr, setShowOcr] = useState(false);
+  const [ocrKeys, setOcrKeys] = useState<Set<string>>(new Set());
   const resRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,7 +106,19 @@ export default function App() {
 
   const res = useMemo(() => (inputs ? analyze(inputs, settings) : null), [inputs, settings]);
 
-  const setVal = (k: string, v: string) => setVals((s) => ({ ...s, [k]: v }));
+  const setVal = (k: string, v: string) => {
+    setVals((s) => ({ ...s, [k]: v }));
+    if (ocrKeys.has(k)) setOcrKeys((o) => { const n = new Set(o); n.delete(k); return n; });
+  };
+  const applyOcr = (a: Applied[]) => {
+    if (!a.length) return;
+    setVals((s) => ({ ...s, ...Object.fromEntries(a.map((x) => [x.key, x.value])) }));
+    setUnits((u) => ({ ...u, ...Object.fromEntries(a.map((x) => [x.key, x.unitIdx])) }));
+    setOcrKeys(new Set(a.map((x) => x.key as string)));
+    const gids = GROUPS.filter((g) => g.fields.some((f) => a.some((x) => x.key === f.key))).map((g) => g.id);
+    setOpen((o) => ({ ...o, ...Object.fromEntries(gids.map((id) => [id, true])) }));
+    setCaseInfo(null);
+  };
   const loadCase = (i: number) => {
     const c = CASES[i];
     const v: Record<string, string> = {};
@@ -120,6 +135,7 @@ export default function App() {
     setChron('bilinmiyor');
     setBp('bilinmiyor');
     setFlags({ shock: false, trauma: false, smoker: false });
+    setOcrKeys(new Set());
     setCaseInfo(`${c.name}: ${c.story} — Beklenen yorum: ${c.answer}`);
     setOpen((o) => ({ ...o, temel: true, oksijen: true, elektrolit: true }));
   };
@@ -129,6 +145,7 @@ export default function App() {
     setBp('bilinmiyor');
     setFlags({ shock: false, trauma: false, smoker: false });
     setCaseInfo(null);
+    setOcrKeys(new Set());
   };
   const goHome = () => {
     clearAll();
@@ -171,6 +188,9 @@ export default function App() {
               <small>pH ve HCO₃⁻ güvenilir; pCO₂ tarama amaçlı; pO₂ yorumlanmaz</small>
             </button>
           </div>
+          <button className="ocr-start" onClick={() => { setSample('arter'); setShowOcr(true); }}>
+            <span aria-hidden>📷</span> Lab ekranının fotoğrafından doldur
+          </button>
           <div className="cases">
             <span className="muted">Eğitim amaçlı örnek vakalar</span>
             <div className="case-row">
@@ -200,9 +220,16 @@ export default function App() {
           <option value="">Örnek vaka…</option>
           {CASES.map((c, i) => <option key={c.name} value={i}>{c.name} — {c.story}</option>)}
         </select>
+        <button className="ocr-tb" onClick={() => setShowOcr(true)}><span aria-hidden>📷</span> Fotoğraftan</button>
         <button className="ghost" onClick={clearAll}>Temizle</button>
       </div>
       {caseInfo && <div className="case-info"><span>{caseInfo}</span><button className="x" onClick={() => setCaseInfo(null)} aria-label="Kapat">×</button></div>}
+      {ocrKeys.size > 0 && (
+        <div className="case-info ocr-info">
+          <span><b>{ocrKeys.size} değer fotoğraftan aktarıldı</b> (sarı çerçeveli). Klinik yorumdan önce her birini kaynakla karşılaştırın; örnek tipinin (arter/ven) doğru seçildiğini kontrol edin.</span>
+          <button className="x" onClick={() => setOcrKeys(new Set())} aria-label="Kapat">×</button>
+        </div>
+      )}
 
       <div className="layout">
         <section className="inputs" aria-label="Değerler">
@@ -218,7 +245,7 @@ export default function App() {
                 {isOpen && (
                   <div className="fields">
                     {g.fields.map((f) => (
-                      <FieldInput key={f.key as string} f={f} isVen={isVen} value={vals[f.key as string] || ''} unitIdx={units[f.key as string] || 0}
+                      <FieldInput key={f.key as string} f={f} isVen={isVen} ocr={ocrKeys.has(f.key as string)} value={vals[f.key as string] || ''} unitIdx={units[f.key as string] || 0}
                         onChange={(v) => setVal(f.key as string, v)} onUnit={(i) => setUnits((u) => ({ ...u, [f.key as string]: i }))} />
                     ))}
                     {g.id === 'oksijen' && isVen && <p className="field-note">Venöz örnekte pvO₂ oksijenasyon yorumunda kullanılmaz; SpO₂ girin.</p>}
@@ -262,6 +289,7 @@ export default function App() {
       )}
       <Footer />
       {modal && <ModalView modal={modal} setModal={setModal} settings={settings} setSettings={setSettings} inputs={inputs} res={res} />}
+      {showOcr && <OcrPanel isVen={isVen} onApply={applyOcr} onClose={() => setShowOcr(false)} />}
     </div>
   );
 }
@@ -293,13 +321,13 @@ function Footer() {
   );
 }
 
-function FieldInput({ f, isVen, value, unitIdx, onChange, onUnit }: { f: Field; isVen: boolean; value: string; unitIdx: number; onChange: (v: string) => void; onUnit: (i: number) => void }) {
+function FieldInput({ f, isVen, ocr, value, unitIdx, onChange, onUnit }: { f: Field; isVen: boolean; ocr: boolean; value: string; unitIdx: number; onChange: (v: string) => void; onUnit: (i: number) => void }) {
   const label = isVen && f.venLabel ? f.venLabel : f.label;
   const id = 'f-' + (f.key as string);
   const multi = f.units.length > 1;
   const bad = value.trim() !== '' && parseNum(value) === undefined;
   return (
-    <div className={`field ${bad ? 'bad' : ''} ${value ? 'filled' : ''}`}>
+    <div className={`field ${bad ? 'bad' : ''} ${value ? 'filled' : ''} ${ocr ? 'ocr' : ''}`} title={ocr ? 'Fotoğraftan okundu — kontrol edin' : undefined}>
       <label htmlFor={id}>{label}</label>
       <div className="field-in">
         <input id={id} inputMode="decimal" autoComplete="off" value={value} placeholder={f.hint} onChange={(e) => onChange(e.target.value)} />
