@@ -173,31 +173,57 @@ export default function App() {
     return (
       <div className="app">
         <Header onHome={goHome} onInfo={() => setModal({ t: 'info', tab: 'sistem' })} onSettings={() => setModal({ t: 'settings' })} />
-        <main className="pick">
-          <h1>Kan gazı örneği</h1>
-          <p className="muted">Yorumlamaya başlamak için örneğin tipini seçin.</p>
-          <div className="pick-grid">
-            <button className="pick-btn arter" onClick={() => setSample('arter')}>
-              <span className="pick-ico">A</span>
-              <strong>Arter</strong>
-              <small>Oksijenasyon, ventilasyon ve asit-baz tam değerlendirme</small>
+        <main className="home">
+          <section className="home-hero">
+            <div className="home-hero-t">
+              <span className="home-kicker">Acil tıp · klinik karar desteği</span>
+              <h1>Kan gazını adım adım yorumlayın</h1>
+              <p>Oksijenasyon, ventilasyon ve asit-baz dengesi; kompansasyon, anyon açığı ve delta oranıyla birlikte. Her hesabın formülü ve kaynağı görünür.</p>
+              <ul className="home-tags">
+                <li><Ico d={I.check} /> Kanıta dayalı</li>
+                <li><Ico d={I.lock} /> Veriler cihazda kalır</li>
+                <li><Ico d={I.camera} /> Fotoğraftan okuma</li>
+              </ul>
+            </div>
+          </section>
+
+          <h2 className="home-h">Yeni yorum</h2>
+          <div className="home-pick">
+            <button className="pick-card arter" onClick={() => setSample('arter')}>
+              <span className="pick-mark">A</span>
+              <span className="pick-txt"><strong>Arter kan gazı</strong><small>Oksijenasyon, ventilasyon ve asit-baz tam değerlendirme</small></span>
+              <Ico d={I.chev} cls="pick-go" />
             </button>
-            <button className="pick-btn ven" onClick={() => setSample('ven')}>
-              <span className="pick-ico">V</span>
-              <strong>Ven</strong>
-              <small>pH ve HCO₃⁻ güvenilir; pCO₂ tarama amaçlı; pO₂ yorumlanmaz</small>
+            <button className="pick-card ven" onClick={() => setSample('ven')}>
+              <span className="pick-mark">V</span>
+              <span className="pick-txt"><strong>Ven kan gazı</strong><small>pH ve HCO₃⁻ güvenilir · pCO₂ tarama amaçlı · pO₂ yorumlanmaz</small></span>
+              <Ico d={I.chev} cls="pick-go" />
             </button>
           </div>
-          <button className="ocr-start" onClick={() => { setSample('arter'); setShowOcr(true); }}>
-            <span aria-hidden>📷</span> Lab ekranının fotoğrafından doldur
+
+          <button className="photo-card" onClick={() => { setSample('arter'); setShowOcr(true); }}>
+            <span className="photo-ico"><Ico d={I.camera} /></span>
+            <span className="pick-txt">
+              <strong>Lab ekranının fotoğrafından doldur</strong>
+              <small>Telefonla çekin → tabloyu kırpın → değerler kontrolünüzle forma aktarılsın. Okuma telefonda yapılır.</small>
+            </span>
+            <Ico d={I.chev} cls="pick-go" />
           </button>
-          <div className="cases">
-            <span className="muted">Eğitim amaçlı örnek vakalar</span>
-            <div className="case-row">
-              {CASES.map((c, i) => (
-                <button key={c.name} className="chip-btn" onClick={() => loadCase(i)}>{c.name}</button>
-              ))}
-            </div>
+
+          <h2 className="home-h">Sistematik okuma</h2>
+          <ol className="home-steps">
+            {['Oksijenasyon', 'Ventilasyon', 'Asit-baz', 'İleri değerlendirme'].map((t, i) => (
+              <li key={t}><span>{i + 1}</span>{t}</li>
+            ))}
+          </ol>
+
+          <h2 className="home-h">Eğitim amaçlı örnek vakalar</h2>
+          <div className="home-cases">
+            {CASES.map((c, i) => (
+              <button key={c.name} className="case-card" onClick={() => loadCase(i)}>
+                <b>{c.name}</b><span>{c.story}</span>
+              </button>
+            ))}
           </div>
         </main>
         <Footer />
@@ -220,7 +246,7 @@ export default function App() {
           <option value="">Örnek vaka…</option>
           {CASES.map((c, i) => <option key={c.name} value={i}>{c.name} — {c.story}</option>)}
         </select>
-        <button className="ocr-tb" onClick={() => setShowOcr(true)}><span aria-hidden>📷</span> Fotoğraftan</button>
+        <button className="ocr-tb" onClick={() => setShowOcr(true)}><Ico d={I.camera} /> Fotoğraftan oku</button>
         <button className="ghost" onClick={clearAll}>Temizle</button>
       </div>
       {caseInfo && <div className="case-info"><span>{caseInfo}</span><button className="x" onClick={() => setCaseInfo(null)} aria-label="Kapat">×</button></div>}
@@ -248,7 +274,7 @@ export default function App() {
                       <FieldInput key={f.key as string} f={f} isVen={isVen} ocr={ocrKeys.has(f.key as string)} value={vals[f.key as string] || ''} unitIdx={units[f.key as string] || 0}
                         onChange={(v) => setVal(f.key as string, v)} onUnit={(i) => setUnits((u) => ({ ...u, [f.key as string]: i }))} />
                     ))}
-                    {g.id === 'oksijen' && isVen && <p className="field-note">Venöz örnekte pvO₂ oksijenasyon yorumunda kullanılmaz; SpO₂ girin.</p>}
+                    {g.id === 'oksijen' && isVen && <p className="field-note">Venöz örnekte pO₂ oksijenasyon yorumunda kullanılmaz; SpO₂ girin.</p>}
                   </div>
                 )}
               </div>
@@ -294,6 +320,23 @@ export default function App() {
   );
 }
 
+// Basit çizgi ikonlar (24×24, stroke)
+const I = {
+  camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  chev: 'M9 5l7 7-7 7',
+  check: 'M4 12l5 5L20 6',
+  lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01',
+  sliders: 'M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4',
+};
+function Ico({ d, cls }: { d: string; cls?: string }) {
+  return (
+    <svg className={`ico ${cls || ''}`} viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={d} />
+    </svg>
+  );
+}
+
 function Header({ onHome, onInfo, onSettings }: { onHome: () => void; onInfo: () => void; onSettings: () => void }) {
   return (
     <header className="hdr">
@@ -305,8 +348,8 @@ function Header({ onHome, onInfo, onSettings }: { onHome: () => void; onInfo: ()
         </div>
       </a>
       <nav className="hdr-actions">
-        <button className="icon-btn" onClick={onInfo} aria-label="Bilgi ve kaynaklar">ⓘ<span> Bilgi</span></button>
-        <button className="icon-btn" onClick={onSettings} aria-label="Ayarlar">⚙<span> Ayarlar</span></button>
+        <button className="icon-btn" onClick={onInfo} aria-label="Bilgi ve kaynaklar"><Ico d={I.info} /><span>Bilgi</span></button>
+        <button className="icon-btn" onClick={onSettings} aria-label="Ayarlar"><Ico d={I.sliders} /><span>Ayarlar</span></button>
       </nav>
     </header>
   );

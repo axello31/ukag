@@ -58,7 +58,8 @@ export default function Cropper({ url, index, total, onCrop, onRotate, onRemove 
   return (
     <div className="crop" role="dialog" aria-modal="true" aria-label="Fotoğrafı kırp">
       <div className="crop-top">
-        <span>{total > 1 ? `Foto ${index}/${total} · ` : ''}Yalnızca <b>kan gazı tablosunu</b> çerçeveye alın</span>
+        {total > 1 && <span className="crop-n">Foto {index}/{total}</span>}
+        <p><b>Sağlıklı okuma için</b> görseldeki gereksiz kısımları kırpın: hasta bilgileri, menüler ve diğer tetkikler çerçevenin dışında kalsın; yalnızca <b>sonuç tablosu</b> içeride olsun.</p>
       </div>
       <div className="crop-area" onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <img ref={imgRef} src={url} alt="" draggable={false} onLoad={(e) => setBox(e.currentTarget.getBoundingClientRect())} />

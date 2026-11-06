@@ -42,7 +42,7 @@ export const GROUPS: Group[] = [
     id: 'oksijen',
     title: 'Oksijenasyon',
     fields: [
-      { key: 'pO2', label: 'pO₂', venLabel: 'pvO₂', hint: '80–100', units: MMHG },
+      { key: 'pO2', label: 'pO₂', hint: '80–100', units: MMHG },
       { key: 'sO2', label: 'sO₂ (gazda)', hint: '%95–98', units: [{ u: '%', toInt: id }] },
       { key: 'SpO2', label: 'SpO₂ (nabız oks.)', hint: '≥ %94', units: [{ u: '%', toInt: id }] },
       { key: 'FiO2', label: 'FiO₂', hint: 'oda havası 21', units: [{ u: '%', toInt: id }, { u: 'ondalık', toInt: (x) => x * 100 }] },
